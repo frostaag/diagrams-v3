@@ -200,6 +200,16 @@ jobs:
             fi
           fi
           
+          # Get commit information for changelog (always needed)
+          processed_count=0
+          failed_count=0
+          current_date=$(date +"%d.%m.%Y")
+          current_time=$(date +"%H:%M:%S")
+          commit_hash=$(git log -1 --format="%h" 2>/dev/null || echo "unknown")
+          author_name=$(git log -1 --format="%an" 2>/dev/null || echo "GitHub Action")
+          commit_message=$(git log -1 --format="%s" 2>/dev/null || echo "Manual processing")
+          
+          # If no changed files, still add a changelog entry for the commit
           if [[ -z "$changed_files" ]]; then
             echo "❌ No .drawio files found to process"
             echo "🔍 Debug: Contents of drawio_files directory:"
@@ -211,22 +221,39 @@ jobs:
             git status --porcelain || echo "Git status failed"
             echo "🔍 Debug: Recent commits:"
             git log --oneline -5 || echo "Git log failed"
+            
+            # Still add a changelog entry for this commit
+            echo "📝 Adding changelog entry for commit without diagram changes..."
+            action="No Diagrams Changed"
+            version="N/A"
+            diagram_name="System"
+            
+            changelog_entry="${current_date},${current_time},\"${diagram_name}\",\"${action}\",\"${version}\",\"${commit_hash}\",\"${author_name}\",\"${commit_message}\""
+            echo "🔍 Debug: Adding system changelog entry: $changelog_entry"
+            echo "$changelog_entry" >> png_files/CHANGELOG.csv
+            
+            # Verify the entry was added
+            if tail -n 1 png_files/CHANGELOG.csv | grep -q "$commit_hash"; then
+              echo "✅ System changelog entry added successfully"
+            else
+              echo "❌ Failed to add system changelog entry"
+              echo "🔍 Debug: Last line of changelog: $(tail -n 1 png_files/CHANGELOG.csv)"
+            fi
+            
             echo "processed=0" >> $GITHUB_OUTPUT
-            exit 0
+            echo "failed=0" >> $GITHUB_OUTPUT
+            
+            echo "📄 Changelog contents:"
+            tail -3 png_files/CHANGELOG.csv 2>/dev/null || echo "No changelog entries found"
+            
+            # Don't exit - continue to commit the changelog
+            echo "🔍 Debug: Continuing to commit changelog with system entry..."
+          else
+            echo "📊 Files to process:"
+            echo "$changed_files"
+            
+            echo "🔄 Starting conversion process..."
           fi
-          
-          echo "📊 Files to process:"
-          echo "$changed_files"
-          
-          processed_count=0
-          failed_count=0
-          current_date=$(date +"%d.%m.%Y")
-          current_time=$(date +"%H:%M:%S")
-          commit_hash=$(git log -1 --format="%h" 2>/dev/null || echo "unknown")
-          author_name=$(git log -1 --format="%an" 2>/dev/null || echo "GitHub Action")
-          commit_message=$(git log -1 --format="%s" 2>/dev/null || echo "Manual processing")
-          
-          echo "🔄 Starting conversion process..."
           
           # Function to get next version for a diagram
           get_next_version() {
