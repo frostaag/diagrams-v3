@@ -52,29 +52,40 @@ jobs:
           
           echo "🔍 Debug: Checking for draw.io files..."
           
-          # Get changed draw.io files - improved logic
+          # Get changed draw.io files - improved logic for only changed files
           changed_files=""
           
-          # Check if we have a previous commit
-          if git rev-parse --verify HEAD^ >/dev/null 2>&1; then
-            echo "🔍 Debug: Checking git diff for changed files..."
-            changed_files=$(git diff --name-only --diff-filter=AM HEAD^ HEAD -- "drawio_files/**/*.drawio" 2>/dev/null || true)
-            echo "🔍 Debug: Git diff found: '$changed_files'"
-          fi
-          
-          # If no changed files or this is first commit, process all files
-          if [[ -z "$changed_files" ]]; then
-            echo "🔍 Debug: No git changes found, checking all .drawio files..."
-            if [[ -d "drawio_files" ]]; then
-              changed_files=$(find drawio_files -name "*.drawio" -type f 2>/dev/null || true)
-              echo "🔍 Debug: Found all files: '$changed_files'"
+          # For push events, only process files that were actually changed in this commit
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            echo "🔍 Debug: Push event detected, checking for changed files in this push..."
+            # Get files changed in the current push (between before and after)
+            changed_files=$(git diff --name-only ${{ github.event.before }}..${{ github.event.after }} -- "drawio_files/**/*.drawio" 2>/dev/null || true)
+            echo "🔍 Debug: Push diff (${{ github.event.before }}..${{ github.event.after }}) found: '$changed_files'"
+            
+            # Fallback to HEAD^ if the above doesn't work
+            if [[ -z "$changed_files" ]] && git rev-parse --verify HEAD^ >/dev/null 2>&1; then
+              echo "🔍 Debug: Fallback - checking git diff HEAD^..HEAD..."
+              changed_files=$(git diff --name-only HEAD^..HEAD -- "drawio_files/**/*.drawio" 2>/dev/null || true)
+              echo "🔍 Debug: HEAD diff found: '$changed_files'"
             fi
           fi
           
-          # If still no files, try manual workflow dispatch detection
-          if [[ -z "$changed_files" && "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "🔍 Debug: Manual trigger detected, processing all .drawio files..."
-            changed_files=$(find drawio_files -name "*.drawio" -type f 2>/dev/null || true)
+          # For workflow_dispatch, process all files
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "🔍 Debug: Manual workflow dispatch detected, processing all .drawio files..."
+            if [[ -d "drawio_files" ]]; then
+              changed_files=$(find drawio_files -name "*.drawio" -type f 2>/dev/null || true)
+              echo "🔍 Debug: Found all files for manual dispatch: '$changed_files'"
+            fi
+          fi
+          
+          # Only as last resort, process all files (for first commit scenarios)
+          if [[ -z "$changed_files" ]]; then
+            echo "🔍 Debug: No changed files detected, this might be first commit - processing all files..."
+            if [[ -d "drawio_files" ]]; then
+              changed_files=$(find drawio_files -name "*.drawio" -type f 2>/dev/null || true)
+              echo "🔍 Debug: Found all files as fallback: '$changed_files'"
+            fi
           fi
           
           if [[ -z "$changed_files" ]]; then
@@ -238,6 +249,7 @@ jobs:
           
           if [[ -n "$teams_webhook" ]]; then
             echo "📤 Sending Teams notification..."
+            echo "🔍 Teams webhook URL starts with: $(echo "$teams_webhook" | head -c 50)..."
             
             echo "🔍 Sending payload to Teams..."
             response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X POST "$teams_webhook" \
