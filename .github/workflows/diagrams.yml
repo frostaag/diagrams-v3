@@ -33,7 +33,9 @@ jobs:
 
       - name: Convert & Update Changelog
         id: convert
+        shell: bash
         run: |
+          set +e  # Disable exit on error for the entire script
           echo "🔍 Debug: Starting conversion process..."
           
           # Ensure directories exist
@@ -157,9 +159,16 @@ jobs:
           ls -la png_files/*.png 2>/dev/null || echo "No PNG files found"
           
           echo "📄 Changelog contents:"
-          tail -5 png_files/CHANGELOG.csv || echo "No changelog entries found"
+          tail -5 png_files/CHANGELOG.csv 2>/dev/null || echo "No changelog entries found"
+          
+          echo "🔍 Debug: Final checks before exit..."
+          echo "🔍 Debug: processed_count=$processed_count"
+          echo "🔍 Debug: failed_count=$failed_count"
+          echo "🔍 Debug: PNG files exist: $(ls png_files/*.png 2>/dev/null | wc -l || echo 0)"
+          echo "🔍 Debug: Changelog exists: $(test -f png_files/CHANGELOG.csv && echo "yes" || echo "no")"
           
           # Ensure the script exits successfully
+          echo "🔍 Debug: Exiting with success..."
           exit 0
 
       - name: Commit Changes
