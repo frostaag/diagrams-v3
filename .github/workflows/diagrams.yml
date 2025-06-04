@@ -345,8 +345,35 @@ jobs:
               site_name="${BASH_REMATCH[2]}"
               echo "🔍 Debug: Extracted tenant: '$tenant_domain', site: '$site_name'"
               
-              # Method 1: Use site-relative path with Graph API
+              # Method 1: Try to create Diagrams folder first, then upload
               graph_site_url="${tenant_domain}:/sites/${site_name}:"
+              echo "🔍 Debug: Checking if Diagrams folder exists..."
+              
+              # Check if Diagrams folder exists
+              folder_check=$(curl -s -w "HTTPSTATUS:%{http_code}" -X GET \
+                "https://graph.microsoft.com/v1.0/sites/${graph_site_url}/drives/${{ vars.DIAGRAMS_SHAREPOINT_DRIVE_ID }}/root:/Diagrams" \
+                -H "Authorization: Bearer $ACCESS_TOKEN")
+              
+              folder_check_code=$(echo "$folder_check" | grep -o "HTTPSTATUS:[0-9]*" | cut -d: -f2)
+              echo "🔍 Debug: Folder check HTTP Status: $folder_check_code"
+              
+              if [[ "$folder_check_code" -ne 200 ]]; then
+                echo "🔍 Debug: Diagrams folder doesn't exist, creating it..."
+                create_folder=$(curl -s -w "HTTPSTATUS:%{http_code}" -X POST \
+                  "https://graph.microsoft.com/v1.0/sites/${graph_site_url}/drives/${{ vars.DIAGRAMS_SHAREPOINT_DRIVE_ID }}/root/children" \
+                  -H "Authorization: Bearer $ACCESS_TOKEN" \
+                  -H "Content-Type: application/json" \
+                  -d '{"name": "Diagrams", "folder": {}}')
+                
+                create_folder_code=$(echo "$create_folder" | grep -o "HTTPSTATUS:[0-9]*" | cut -d: -f2)
+                create_folder_body=$(echo "$create_folder" | sed -E 's/HTTPSTATUS:[0-9]*$//')
+                echo "🔍 Debug: Create folder HTTP Status: $create_folder_code"
+                echo "🔍 Debug: Create folder Response: $create_folder_body"
+              else
+                echo "🔍 Debug: Diagrams folder already exists"
+              fi
+              
+              # Now try uploading to Diagrams folder
               response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X PUT \
                 "https://graph.microsoft.com/v1.0/sites/${graph_site_url}/drives/${{ vars.DIAGRAMS_SHAREPOINT_DRIVE_ID }}/root:/Diagrams/Diagrams_Changelog.csv:/content" \
                 -H "Authorization: Bearer $ACCESS_TOKEN" \
@@ -360,29 +387,49 @@ jobs:
               echo "🔍 Debug: SharePoint Response: $response_body"
               
               if [[ "$http_code" -eq 200 || "$http_code" -eq 201 ]]; then
-                echo "✅ Uploaded changelog to SharePoint"
+                echo "✅ Uploaded changelog to SharePoint (Diagrams folder)"
               else
-                echo "❌ Failed to upload to SharePoint (HTTP $http_code)"
+                echo "❌ Failed to upload to SharePoint Diagrams folder (HTTP $http_code)"
                 echo "🔍 Response body: $response_body"
                 
-                # Method 2: Try direct drive access as fallback
-                echo "🔍 Debug: Trying direct drive access fallback..."
-                alt_response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X PUT \
-                  "https://graph.microsoft.com/v1.0/drives/${{ vars.DIAGRAMS_SHAREPOINT_DRIVE_ID }}/root:/Diagrams/Diagrams_Changelog.csv:/content" \
+                # Method 2: Try uploading to root directory as fallback
+                echo "🔍 Debug: Trying upload to root directory as fallback..."
+                root_response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X PUT \
+                  "https://graph.microsoft.com/v1.0/sites/${graph_site_url}/drives/${{ vars.DIAGRAMS_SHAREPOINT_DRIVE_ID }}/root:/Diagrams_Changelog.csv:/content" \
                   -H "Authorization: Bearer $ACCESS_TOKEN" \
                   -H "Content-Type: text/csv" \
                   --data-binary @png_files/CHANGELOG.csv)
                 
-                alt_http_code=$(echo "$alt_response" | grep -o "HTTPSTATUS:[0-9]*" | cut -d: -f2)
-                alt_response_body=$(echo "$alt_response" | sed -E 's/HTTPSTATUS:[0-9]*$//')
+                root_http_code=$(echo "$root_response" | grep -o "HTTPSTATUS:[0-9]*" | cut -d: -f2)
+                root_response_body=$(echo "$root_response" | sed -E 's/HTTPSTATUS:[0-9]*$//')
                 
-                echo "🔍 Debug: Direct drive HTTP Status: $alt_http_code"
-                echo "🔍 Debug: Direct drive Response: $alt_response_body"
+                echo "🔍 Debug: Root upload HTTP Status: $root_http_code"
+                echo "🔍 Debug: Root upload Response: $root_response_body"
                 
-                if [[ "$alt_http_code" -eq 200 || "$alt_http_code" -eq 201 ]]; then
-                  echo "✅ Uploaded changelog to SharePoint (direct drive access)"
+                if [[ "$root_http_code" -eq 200 || "$root_http_code" -eq 201 ]]; then
+                  echo "✅ Uploaded changelog to SharePoint root directory"
                 else
-                  echo "❌ All SharePoint upload attempts failed"
+                  echo "❌ Failed to upload to SharePoint root directory (HTTP $root_http_code)"
+                  
+                  # Method 3: Try direct drive access as final fallback
+                  echo "🔍 Debug: Trying direct drive access as final fallback..."
+                  direct_response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X PUT \
+                    "https://graph.microsoft.com/v1.0/drives/${{ vars.DIAGRAMS_SHAREPOINT_DRIVE_ID }}/root:/Diagrams_Changelog.csv:/content" \
+                    -H "Authorization: Bearer $ACCESS_TOKEN" \
+                    -H "Content-Type: text/csv" \
+                    --data-binary @png_files/CHANGELOG.csv)
+                  
+                  direct_http_code=$(echo "$direct_response" | grep -o "HTTPSTATUS:[0-9]*" | cut -d: -f2)
+                  direct_response_body=$(echo "$direct_response" | sed -E 's/HTTPSTATUS:[0-9]*$//')
+                  
+                  echo "🔍 Debug: Direct drive HTTP Status: $direct_http_code"
+                  echo "🔍 Debug: Direct drive Response: $direct_response_body"
+                  
+                  if [[ "$direct_http_code" -eq 200 || "$direct_http_code" -eq 201 ]]; then
+                    echo "✅ Uploaded changelog to SharePoint (direct drive access)"
+                  else
+                    echo "❌ All SharePoint upload attempts failed"
+                  fi
                 fi
               fi
             else
@@ -431,6 +478,27 @@ jobs:
             # Create JSON payload with proper escaping
             echo "🔍 Sending payload to Teams..."
             
+            # Get detailed file information for Teams notification
+            processed_files=""
+            failed_files=""
+            if [[ "$processed" != "0" ]]; then
+              processed_files="✅ Successfully converted diagrams to PNG"
+            fi
+            if [[ "$failed" != "0" ]]; then
+              failed_files="❌ $failed files failed to convert"
+            fi
+            
+            # Build status summary
+            if [[ "$processed" != "0" && "$failed" == "0" ]]; then
+              summary_text="All $processed diagram(s) successfully converted to PNG format"
+            elif [[ "$processed" != "0" && "$failed" != "0" ]]; then
+              summary_text="Mixed results: $processed successful, $failed failed conversions"
+            elif [[ "$processed" == "0" && "$failed" != "0" ]]; then
+              summary_text="All $failed diagram(s) failed to convert"
+            else
+              summary_text="No diagrams found to process"
+            fi
+            
             response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X POST "$teams_webhook" \
               -H "Content-Type: application/json" \
               -d "{
@@ -438,22 +506,33 @@ jobs:
                 \"@context\": \"https://schema.org/extensions\",
                 \"summary\": \"Draw.io Processing $status\",
                 \"themeColor\": \"$color\",
-                \"title\": \"📊 Draw.io Processing V3\",
-                \"text\": \"Processing completed: $status\",
+                \"title\": \"📊 Draw.io Processing V3 - $summary_text\",
+                \"text\": \"**Processing Results:** $status\\n\\n$summary_text\",
                 \"sections\": [{
+                  \"activityTitle\": \"📈 Processing Statistics\",
                   \"facts\": [
-                    {\"name\": \"📁 Files Processed\", \"value\": \"$processed\"},
+                    {\"name\": \"✅ Files Successfully Processed\", \"value\": \"$processed\"},
                     {\"name\": \"❌ Files Failed\", \"value\": \"$failed\"},
                     {\"name\": \"🔄 Workflow Run\", \"value\": \"#${{ github.run_number }}\"},
-                    {\"name\": \"🌿 Branch\", \"value\": \"${{ github.ref_name }}\"}
+                    {\"name\": \"🌿 Branch\", \"value\": \"${{ github.ref_name }}\"},
+                    {\"name\": \"👤 Triggered By\", \"value\": \"${{ github.actor }}\"},
+                    {\"name\": \"📅 Timestamp\", \"value\": \"$(date -u +'%Y-%m-%d %H:%M:%S UTC')\"},
+                    {\"name\": \"💾 Repository\", \"value\": \"${{ github.repository }}\"}
                   ]
                 }],
                 \"potentialAction\": [{
                   \"@type\": \"OpenUri\",
-                  \"name\": \"View Run Details\",
+                  \"name\": \"🔍 View Workflow Details\",
                   \"targets\": [{
                     \"os\": \"default\",
                     \"uri\": \"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"
+                  }]
+                }, {
+                  \"@type\": \"OpenUri\",
+                  \"name\": \"📁 View Repository\",
+                  \"targets\": [{
+                    \"os\": \"default\",
+                    \"uri\": \"${{ github.server_url }}/${{ github.repository }}\"
                   }]
                 }]
               }")
