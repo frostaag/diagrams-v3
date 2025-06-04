@@ -68,6 +68,18 @@ jobs:
               changed_files=$(git diff --name-only HEAD^..HEAD -- "drawio_files/**/*.drawio" 2>/dev/null || true)
               echo "🔍 Debug: HEAD diff found: '$changed_files'"
             fi
+            
+            # Additional check: only process files that actually exist
+            if [[ -n "$changed_files" ]]; then
+              existing_files=""
+              for file in $changed_files; do
+                if [[ -f "$file" ]]; then
+                  existing_files="$existing_files $file"
+                fi
+              done
+              changed_files=$(echo "$existing_files" | xargs -n1 2>/dev/null | sort -u | tr '\n' ' ')
+              echo "🔍 Debug: Filtered to existing files: '$changed_files'"
+            fi
           fi
           
           # For workflow_dispatch, process all files
@@ -109,6 +121,30 @@ jobs:
           
           echo "🔄 Starting conversion process..."
           
+          # Function to get next version for a diagram
+          get_next_version() {
+            local diagram_name="$1"
+            local last_version="1.0"
+            
+            # Get the last version for this specific diagram from changelog
+            if [[ -f "png_files/CHANGELOG.csv" ]]; then
+              last_version=$(grep "^[^,]*,[^,]*,\"${diagram_name}\"," png_files/CHANGELOG.csv | tail -1 | cut -d'"' -f8 2>/dev/null || echo "1.0")
+              if [[ -z "$last_version" || "$last_version" == "1.0" ]]; then
+                last_version="1.0"
+              fi
+            fi
+            
+            # Increment version (simple major.minor increment)
+            if [[ "$last_version" =~ ^([0-9]+)\.([0-9]+)$ ]]; then
+              major="${BASH_REMATCH[1]}"
+              minor="${BASH_REMATCH[2]}"
+              new_minor=$((minor + 1))
+              echo "${major}.${new_minor}"
+            else
+              echo "1.1"  # Default if version parsing fails
+            fi
+          }
+          
           # Process each file individually
           for file in $changed_files; do
             [[ -z "$file" ]] && continue
@@ -117,6 +153,10 @@ jobs:
             png_file="png_files/${basename}.png"
             
             echo "🔄 Converting: $file -> $png_file"
+            
+            # Get version for this diagram
+            version=$(get_next_version "$basename")
+            echo "📊 Version for $basename: $version"
             
             # Check if source file exists
             if [[ ! -f "$file" ]]; then
@@ -153,8 +193,8 @@ jobs:
               fi
             fi
             
-            # Add to changelog
-            echo "${current_date},${current_time},\"${basename}\",\"${action}\",\"1.0\",\"${commit_hash}\",\"${author_name}\",\"${commit_message}\"" >> png_files/CHANGELOG.csv || true
+            # Add to changelog with proper version
+            echo "${current_date},${current_time},\"${basename}\",\"${action}\",\"${version}\",\"${commit_hash}\",\"${author_name}\",\"${commit_message}\"" >> png_files/CHANGELOG.csv || true
             
           done
           
