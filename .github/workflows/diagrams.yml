@@ -154,6 +154,9 @@ jobs:
           
           echo "📄 Changelog contents:"
           tail -5 png_files/CHANGELOG.csv || echo "No changelog entries found"
+          
+          # Ensure the script exits successfully
+          exit 0
 
       - name: Commit Changes
         if: steps.convert.outputs.processed != '0'
@@ -217,9 +220,14 @@ jobs:
           failed="${{ needs.process.outputs.failed || '0' }}"
           
           # Check if Teams webhook is configured
-          if [[ -n "${{ vars.DIAGRAMS_TEAMS_WEBHOOK }}" ]]; then
+          teams_webhook="${{ vars.DIAGRAMS_TEAMS_WEBHOOK }}"
+          echo "🔍 Teams webhook configured: $(if [[ -n "$teams_webhook" ]]; then echo "Yes (${#teams_webhook} chars)"; else echo "No"; fi)"
+          
+          if [[ -n "$teams_webhook" ]]; then
             echo "📤 Sending Teams notification..."
-            curl -X POST "${{ vars.DIAGRAMS_TEAMS_WEBHOOK }}" \
+            
+            echo "🔍 Sending payload to Teams..."
+            response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X POST "$teams_webhook" \
               -H "Content-Type: application/json" \
               -d "{
                 \"@type\": \"MessageCard\",
@@ -244,16 +252,26 @@ jobs:
                     \"uri\": \"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"
                   }]
                 }]
-              }"
+              }")
             
-            if [[ $? -eq 0 ]]; then
+            http_code=$(echo "$response" | grep -o "HTTPSTATUS:[0-9]*" | cut -d: -f2)
+            response_body=$(echo "$response" | sed -E 's/HTTPSTATUS:[0-9]*$//')
+            
+            echo "🔍 HTTP Status: $http_code"
+            echo "🔍 Response: $response_body"
+            
+            if [[ "$http_code" -eq 200 ]]; then
               echo "✅ Teams notification sent successfully"
             else
-              echo "❌ Failed to send Teams notification"
+              echo "❌ Failed to send Teams notification (HTTP $http_code)"
+              echo "🔍 Response body: $response_body"
             fi
           else
             echo "⚠️ Teams webhook not configured (DIAGRAMS_TEAMS_WEBHOOK variable missing)"
-            echo "ℹ️ To enable Teams notifications, set the DIAGRAMS_TEAMS_WEBHOOK repository variable"
+            echo "ℹ️ To enable Teams notifications:"
+            echo "   1. Go to Repository Settings > Variables and secrets > Variables"
+            echo "   2. Add a new variable named 'DIAGRAMS_TEAMS_WEBHOOK'"
+            echo "   3. Set the value to your Teams webhook URL"
           fi
           
           echo "📊 Final Summary:"
