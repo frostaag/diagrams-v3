@@ -104,15 +104,35 @@ jobs:
               all_drawio_files=$(find drawio_files -name "*.drawio" -type f 2>/dev/null || true)
               echo "🔍 Debug: All drawio files found: '$all_drawio_files'"
               
+              # Debug: Check what git log --name-status shows
+              echo "🔍 Debug: Git log name-status output:"
+              git log -1 --name-status --pretty=format: HEAD 2>/dev/null || echo "Command failed"
+              
               for file in $all_drawio_files; do
+                echo "🔍 Debug: Checking if $file was added in last commit..."
                 # Check if file was added in the last commit
                 if git log -1 --name-status --pretty=format: HEAD 2>/dev/null | grep -q "^A[[:space:]]\\+${file}$"; then
                   echo "🔍 Debug: File $file was added in last commit"
                   changed_files="$changed_files $file"
+                elif git log -1 --name-status --pretty=format: HEAD 2>/dev/null | grep -q "^M[[:space:]]\\+${file}$"; then
+                  echo "🔍 Debug: File $file was modified in last commit"
+                  changed_files="$changed_files $file"
                 fi
               done
               changed_files=$(echo "$changed_files" | xargs -n1 2>/dev/null | sort -u | tr '\n' ' ' | sed 's/^ *//;s/ *$//' || true)
-              echo "🔍 Debug: Found added files: '$changed_files'"
+              echo "🔍 Debug: Found added/modified files: '$changed_files'"
+            fi
+            
+            # Method 7: Last resort - check the actual git diff with the SHAs we have
+            if [[ -z "$changed_files" ]] && [[ -n "${{ github.event.before }}" && -n "${{ github.event.after }}" ]]; then
+              echo "🔍 Debug: Last resort - detailed SHA diff check..."
+              echo "🔍 Debug: Running: git diff --name-only ${{ github.event.before }} ${{ github.event.after }}"
+              all_changed=$(git diff --name-only ${{ github.event.before }} ${{ github.event.after }} 2>/dev/null || true)
+              echo "🔍 Debug: All changed files in commit: '$all_changed'"
+              
+              # Filter for drawio files
+              changed_files=$(echo "$all_changed" | grep "drawio_files/.*\.drawio$" || true)
+              echo "🔍 Debug: Filtered drawio files: '$changed_files'"
             fi
             
             # Additional check: only process files that actually exist
