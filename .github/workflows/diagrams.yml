@@ -1,0 +1,172 @@
+name: Draw.io to PNG Processing V3
+
+on:
+  push:
+    paths:
+      - 'drawio_files/**/*.drawio'
+  workflow_dispatch:
+
+env:
+  DRAWIO_VERSION: "26.2.2"
+
+permissions:
+  contents: write
+
+jobs:
+  process:
+    runs-on: ubuntu-latest
+    outputs:
+      processed: ${{ steps.convert.outputs.processed }}
+      
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Draw.io
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget xvfb
+          wget -q "https://github.com/jgraph/drawio-desktop/releases/download/v${{ env.DRAWIO_VERSION }}/drawio-amd64-${{ env.DRAWIO_VERSION }}.deb"
+          sudo apt-get install -y "./drawio-amd64-${{ env.DRAWIO_VERSION }}.deb"
+
+      - name: Convert & Update Changelog
+        id: convert
+        run: |
+          # Ensure directories exist
+          mkdir -p png_files
+          
+          # Initialize changelog if it doesn't exist
+          if [[ ! -f "png_files/CHANGELOG.csv" ]]; then
+            echo "Date,Time,Diagram,Action,Version,Commit,Author" > png_files/CHANGELOG.csv
+          fi
+          
+          # Get changed draw.io files
+          if git rev-parse --verify HEAD^ >/dev/null 2>&1; then
+            changed_files=$(git diff --name-only --diff-filter=AM HEAD^ HEAD -- "drawio_files/*.drawio" || true)
+          else
+            changed_files=$(find drawio_files -name "*.drawio" -type f || true)
+          fi
+          
+          if [[ -z "$changed_files" ]]; then
+            echo "No files to process"
+            echo "processed=0" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          processed_count=0
+          current_date=$(date +"%d.%m.%Y")
+          current_time=$(date +"%H:%M:%S")
+          commit_hash=$(git log -1 --format="%h")
+          author_name=$(git log -1 --format="%an")
+          
+          while IFS= read -r file; do
+            [[ -z "$file" ]] && continue
+            
+            basename=$(basename "$file" .drawio)
+            png_file="png_files/${basename}.png"
+            
+            echo "Converting $basename..."
+            
+            # Convert to PNG
+            if xvfb-run --auto-servernum drawio -x -f png --scale 2.0 -o "$png_file" "$file" >/dev/null 2>&1; then
+              # Verify file was created and is not empty
+              if [[ -f "$png_file" && -s "$png_file" ]]; then
+                echo "✅ Successfully converted $basename"
+                action="Converted to PNG"
+                ((processed_count++))
+              else
+                echo "❌ Empty PNG for $basename"
+                action="Failed - Empty PNG"
+              fi
+            else
+              echo "❌ Failed to convert $basename"
+              action="Failed - Conversion Error"
+            fi
+            
+            # Add to changelog
+            echo "${current_date},${current_time},\"${basename}\",\"${action}\",\"1.0\",\"${commit_hash}\",\"${author_name}\"" >> png_files/CHANGELOG.csv
+            
+          done <<< "$changed_files"
+          
+          echo "processed=$processed_count" >> $GITHUB_OUTPUT
+          echo "Processed $processed_count files"
+
+      - name: Commit Changes
+        if: steps.convert.outputs.processed != '0'
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add png_files/
+          git commit -m "Generate PNG files and update changelog [skip ci]" || exit 0
+          git push
+
+      - name: Upload to SharePoint
+        if: steps.convert.outputs.processed != '0'
+        continue-on-error: true
+        run: |
+          # Get access token
+          ACCESS_TOKEN=$(curl -s -X POST \
+            "https://login.microsoftonline.com/${{ vars.DIAGRAMS_SHAREPOINT_TENANT_ID }}/oauth2/v2.0/token" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -d "client_id=${{ vars.DIAGRAMS_SHAREPOINT_CLIENT_ID }}" \
+            -d "client_secret=${{ secrets.DIAGRAMS_SHAREPOINT_CLIENTSECRET }}" \
+            -d "scope=https://graph.microsoft.com/.default" \
+            -d "grant_type=client_credentials" | \
+            jq -r '.access_token')
+          
+          if [[ "$ACCESS_TOKEN" != "null" && -n "$ACCESS_TOKEN" ]]; then
+            # Upload changelog
+            curl -s -X PUT \
+              "https://graph.microsoft.com/v1.0/drives/${{ vars.DIAGRAMS_SHAREPOINT_DRIVE_ID }}/root:/Diagrams/Diagrams_Changelog.csv:/content" \
+              -H "Authorization: Bearer $ACCESS_TOKEN" \
+              -H "Content-Type: text/csv" \
+              --data-binary @png_files/CHANGELOG.csv
+            echo "✅ Uploaded changelog to SharePoint"
+          else
+            echo "❌ Failed to get SharePoint access token"
+          fi
+
+  notify:
+    needs: process
+    runs-on: ubuntu-latest
+    if: always() && vars.DIAGRAMS_TEAMS_WEBHOOK
+    
+    steps:
+      - name: Send Teams Notification
+        run: |
+          if [[ "${{ needs.process.result }}" == "success" ]]; then
+            status="✅ Success"
+            color="good"
+          else
+            status="❌ Failed"
+            color="danger"
+          fi
+          
+          processed="${{ needs.process.outputs.processed || '0' }}"
+          
+          curl -X POST "${{ vars.DIAGRAMS_TEAMS_WEBHOOK }}" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"@type\": \"MessageCard\",
+              \"@context\": \"https://schema.org/extensions\",
+              \"summary\": \"Draw.io Processing $status\",
+              \"themeColor\": \"$color\",
+              \"title\": \"📊 Draw.io Processing V3\",
+              \"text\": \"Processing completed: $status\",
+              \"sections\": [{
+                \"facts\": [
+                  {\"name\": \"📁 Files Processed\", \"value\": \"$processed\"},
+                  {\"name\": \"🔄 Workflow\", \"value\": \"#${{ github.run_number }}\"}
+                ]
+              }],
+              \"potentialAction\": [{
+                \"@type\": \"OpenUri\",
+                \"name\": \"View Run\",
+                \"targets\": [{
+                  \"os\": \"default\",
+                  \"uri\": \"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"
+                }]
+              }]
+            }"
