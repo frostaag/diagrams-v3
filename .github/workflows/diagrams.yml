@@ -181,24 +181,38 @@ jobs:
           # Function to get next version for a diagram
           get_next_version() {
             local diagram_name="$1"
-            local last_version="1.0"
+            local commit_msg="$2"
+            local last_version=""
             
             # Get the last version for this specific diagram from changelog
             if [[ -f "png_files/CHANGELOG.csv" ]]; then
-              last_version=$(grep "^[^,]*,[^,]*,\"${diagram_name}\"," png_files/CHANGELOG.csv | tail -1 | cut -d'"' -f8 2>/dev/null || echo "1.0")
-              if [[ -z "$last_version" || "$last_version" == "1.0" ]]; then
-                last_version="1.0"
-              fi
+              last_version=$(grep "^[^,]*,[^,]*,\"${diagram_name}\"," png_files/CHANGELOG.csv | tail -1 | cut -d'"' -f8 2>/dev/null || echo "")
             fi
             
-            # Increment version (simple major.minor increment)
+            # If no previous version found, this is a new file - start at 1.0
+            if [[ -z "$last_version" ]]; then
+              echo "1.0"
+              return
+            fi
+            
+            # Parse the last version
             if [[ "$last_version" =~ ^([0-9]+)\.([0-9]+)$ ]]; then
               major="${BASH_REMATCH[1]}"
               minor="${BASH_REMATCH[2]}"
-              new_minor=$((minor + 1))
-              echo "${major}.${new_minor}"
+              
+              # Determine version bump type based on commit message
+              commit_lower=$(echo "$commit_msg" | tr '[:upper:]' '[:lower:]')
+              
+              # Check for major release keywords
+              if [[ "$commit_lower" =~ (added|major|breaking|release|version) ]]; then
+                echo "$((major + 1)).0"
+              # Check for minor release keywords (default for most updates)
+              else
+                echo "${major}.$((minor + 1))"
+              fi
             else
-              echo "1.1"  # Default if version parsing fails
+              # If version parsing fails, default to 1.1
+              echo "1.1"
             fi
           }
           
@@ -212,7 +226,7 @@ jobs:
             echo "🔄 Converting: $file -> $png_file"
             
             # Get version for this diagram
-            version=$(get_next_version "$basename")
+            version=$(get_next_version "$basename" "$commit_message")
             echo "📊 Version for $basename: $version"
             
             # Check if source file exists
