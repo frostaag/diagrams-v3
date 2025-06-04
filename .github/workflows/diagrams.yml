@@ -39,12 +39,12 @@ jobs:
           
           # Initialize changelog if it doesn't exist
           if [[ ! -f "png_files/CHANGELOG.csv" ]]; then
-            echo "Date,Time,Diagram,Action,Version,Commit,Author" > png_files/CHANGELOG.csv
+            echo "Date,Time,Diagram,Action,Version,Commit,Author,CommitMessage" > png_files/CHANGELOG.csv
           fi
           
           # Get changed draw.io files
           if git rev-parse --verify HEAD^ >/dev/null 2>&1; then
-            changed_files=$(git diff --name-only --diff-filter=AM HEAD^ HEAD -- "drawio_files/*.drawio" || true)
+            changed_files=$(git diff --name-only --diff-filter=AM HEAD^ HEAD -- "drawio_files/**/*.drawio" || true)
           else
             changed_files=$(find drawio_files -name "*.drawio" -type f || true)
           fi
@@ -60,6 +60,7 @@ jobs:
           current_time=$(date +"%H:%M:%S")
           commit_hash=$(git log -1 --format="%h")
           author_name=$(git log -1 --format="%an")
+          commit_message=$(git log -1 --format="%s")
           
           while IFS= read -r file; do
             [[ -z "$file" ]] && continue
@@ -86,7 +87,7 @@ jobs:
             fi
             
             # Add to changelog
-            echo "${current_date},${current_time},\"${basename}\",\"${action}\",\"1.0\",\"${commit_hash}\",\"${author_name}\"" >> png_files/CHANGELOG.csv
+            echo "${current_date},${current_time},\"${basename}\",\"${action}\",\"1.0\",\"${commit_hash}\",\"${author_name}\",\"${commit_message}\"" >> png_files/CHANGELOG.csv
             
           done <<< "$changed_files"
           
@@ -99,8 +100,12 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add png_files/
-          git commit -m "Generate PNG files and update changelog [skip ci]" || exit 0
-          git push
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Generate PNG files and update changelog [skip ci]"
+            git push
+          fi
 
       - name: Upload to SharePoint
         if: steps.convert.outputs.processed != '0'
