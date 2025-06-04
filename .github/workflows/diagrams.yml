@@ -189,12 +189,12 @@ jobs:
             # Version is the 5th field
             if [[ -f "png_files/CHANGELOG.csv" ]]; then
               last_version=$(grep "^[^,]*,[^,]*,\"${diagram_name}\"," png_files/CHANGELOG.csv | tail -1 | cut -d',' -f5 | tr -d '"' 2>/dev/null || echo "")
-              echo "🔍 Debug: Last version found for $diagram_name: '$last_version'"
+              echo "🔍 Debug: Last version found for $diagram_name: '$last_version'" >&2
             fi
             
             # If no previous version found, this is a new file - start at 1.0
             if [[ -z "$last_version" ]]; then
-              echo "🔍 Debug: No previous version found, starting at 1.0"
+              echo "🔍 Debug: No previous version found, starting at 1.0" >&2
               echo "1.0"
               return
             fi
@@ -203,26 +203,26 @@ jobs:
             if [[ "$last_version" =~ ^([0-9]+)\.([0-9]+)$ ]]; then
               major="${BASH_REMATCH[1]}"
               minor="${BASH_REMATCH[2]}"
-              echo "🔍 Debug: Parsed version - Major: $major, Minor: $minor"
+              echo "🔍 Debug: Parsed version - Major: $major, Minor: $minor" >&2
               
               # Determine version bump type based on commit message
               commit_lower=$(echo "$commit_msg" | tr '[:upper:]' '[:lower:]')
-              echo "🔍 Debug: Commit message (lowercase): '$commit_lower'"
+              echo "🔍 Debug: Commit message (lowercase): '$commit_lower'" >&2
               
               # Check for major release keywords
               if [[ "$commit_lower" =~ (added|major|breaking|release|version) ]]; then
                 new_version="$((major + 1)).0"
-                echo "🔍 Debug: Major release detected, new version: $new_version"
+                echo "🔍 Debug: Major release detected, new version: $new_version" >&2
                 echo "$new_version"
               # Check for minor release keywords (default for most updates)
               else
                 new_version="${major}.$((minor + 1))"
-                echo "🔍 Debug: Minor release detected, new version: $new_version"
+                echo "🔍 Debug: Minor release detected, new version: $new_version" >&2
                 echo "$new_version"
               fi
             else
               # If version parsing fails, default to 1.1
-              echo "🔍 Debug: Version parsing failed for '$last_version', defaulting to 1.1"
+              echo "🔍 Debug: Version parsing failed for '$last_version', defaulting to 1.1" >&2
               echo "1.1"
             fi
           }
@@ -332,48 +332,67 @@ jobs:
             jq -r '.access_token')
           
           if [[ "$ACCESS_TOKEN" != "null" && -n "$ACCESS_TOKEN" ]]; then
-            # Upload changelog using correct SharePoint API endpoint
+            # Upload changelog to SharePoint using the configured URL variable
+            sharepoint_url="${{ vars.DIAGRAMS_SHAREPOINT_URL }}"
             echo "🔍 Debug: Uploading changelog to SharePoint..."
-            response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X PUT \
-              "https://graph.microsoft.com/v1.0/drives/${{ vars.DIAGRAMS_SHAREPOINT_DRIVE_ID }}/root:/Diagrams/Diagrams_Changelog.csv:/content" \
-              -H "Authorization: Bearer $ACCESS_TOKEN" \
-              -H "Content-Type: text/csv" \
-              --data-binary @png_files/CHANGELOG.csv)
+            echo "🔍 Debug: SharePoint URL from variable: '$sharepoint_url'"
+            echo "🔍 Debug: Target path: Diagrams/Diagrams_Changelog.csv"
             
-            http_code=$(echo "$response" | grep -o "HTTPSTATUS:[0-9]*" | cut -d: -f2)
-            response_body=$(echo "$response" | sed -E 's/HTTPSTATUS:[0-9]*$//')
-            
-            echo "🔍 Debug: SharePoint HTTP Status: $http_code"
-            echo "🔍 Debug: SharePoint Response: $response_body"
-            
-            if [[ "$http_code" -eq 200 || "$http_code" -eq 201 ]]; then
-              echo "✅ Uploaded changelog to SharePoint"
-            else
-              echo "❌ Failed to upload to SharePoint (HTTP $http_code)"
-              echo "🔍 Response body: $response_body"
+            # Extract site path from the SharePoint URL for Graph API
+            # URL format: https://frostaag.sharepoint.com/sites/DatasphereFileConnector
+            if [[ "$sharepoint_url" =~ https://([^/]+)/sites/([^/]+) ]]; then
+              tenant_domain="${BASH_REMATCH[1]}"
+              site_name="${BASH_REMATCH[2]}"
+              echo "🔍 Debug: Extracted tenant: '$tenant_domain', site: '$site_name'"
               
-              # Try alternative endpoint if the first one fails
-              echo "🔍 Debug: Trying alternative SharePoint endpoint..."
-              alt_response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X PUT \
-                "https://graph.microsoft.com/v1.0/drives/${{ vars.DIAGRAMS_SHAREPOINT_DRIVE_ID }}/items/root:/Diagrams/Diagrams_Changelog.csv:/content" \
+              # Method 1: Use site-relative path with Graph API
+              graph_site_url="${tenant_domain}:/sites/${site_name}:"
+              response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X PUT \
+                "https://graph.microsoft.com/v1.0/sites/${graph_site_url}/drives/${{ vars.DIAGRAMS_SHAREPOINT_DRIVE_ID }}/root:/Diagrams/Diagrams_Changelog.csv:/content" \
                 -H "Authorization: Bearer $ACCESS_TOKEN" \
                 -H "Content-Type: text/csv" \
                 --data-binary @png_files/CHANGELOG.csv)
               
-              alt_http_code=$(echo "$alt_response" | grep -o "HTTPSTATUS:[0-9]*" | cut -d: -f2)
-              alt_response_body=$(echo "$alt_response" | sed -E 's/HTTPSTATUS:[0-9]*$//')
+              http_code=$(echo "$response" | grep -o "HTTPSTATUS:[0-9]*" | cut -d: -f2)
+              response_body=$(echo "$response" | sed -E 's/HTTPSTATUS:[0-9]*$//')
               
-              echo "🔍 Debug: Alternative endpoint HTTP Status: $alt_http_code"
-              echo "🔍 Debug: Alternative endpoint Response: $alt_response_body"
+              echo "🔍 Debug: SharePoint HTTP Status: $http_code"
+              echo "🔍 Debug: SharePoint Response: $response_body"
               
-              if [[ "$alt_http_code" -eq 200 || "$alt_http_code" -eq 201 ]]; then
-                echo "✅ Uploaded changelog to SharePoint (alternative endpoint)"
+              if [[ "$http_code" -eq 200 || "$http_code" -eq 201 ]]; then
+                echo "✅ Uploaded changelog to SharePoint"
               else
-                echo "❌ Both SharePoint endpoints failed"
+                echo "❌ Failed to upload to SharePoint (HTTP $http_code)"
+                echo "🔍 Response body: $response_body"
+                
+                # Method 2: Try direct drive access as fallback
+                echo "🔍 Debug: Trying direct drive access fallback..."
+                alt_response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X PUT \
+                  "https://graph.microsoft.com/v1.0/drives/${{ vars.DIAGRAMS_SHAREPOINT_DRIVE_ID }}/root:/Diagrams/Diagrams_Changelog.csv:/content" \
+                  -H "Authorization: Bearer $ACCESS_TOKEN" \
+                  -H "Content-Type: text/csv" \
+                  --data-binary @png_files/CHANGELOG.csv)
+                
+                alt_http_code=$(echo "$alt_response" | grep -o "HTTPSTATUS:[0-9]*" | cut -d: -f2)
+                alt_response_body=$(echo "$alt_response" | sed -E 's/HTTPSTATUS:[0-9]*$//')
+                
+                echo "🔍 Debug: Direct drive HTTP Status: $alt_http_code"
+                echo "🔍 Debug: Direct drive Response: $alt_response_body"
+                
+                if [[ "$alt_http_code" -eq 200 || "$alt_http_code" -eq 201 ]]; then
+                  echo "✅ Uploaded changelog to SharePoint (direct drive access)"
+                else
+                  echo "❌ All SharePoint upload attempts failed"
+                fi
               fi
+            else
+              echo "❌ Could not parse SharePoint URL: '$sharepoint_url'"
+              echo "❌ Expected format: https://tenant.sharepoint.com/sites/sitename"
             fi
           else
             echo "❌ Failed to get SharePoint access token"
+            echo "🔍 Debug: ACCESS_TOKEN length: ${#ACCESS_TOKEN}"
+            echo "🔍 Debug: ACCESS_TOKEN starts with: $(echo "$ACCESS_TOKEN" | head -c 20)..."
           fi
 
   notify:
@@ -398,15 +417,20 @@ jobs:
           processed="${{ needs.process.outputs.processed || '0' }}"
           failed="${{ needs.process.outputs.failed || '0' }}"
           
-          # Check if Teams webhook is configured
-          teams_webhook="${{ vars.DIAGRAMS_TEAMS_WEBHOOK }}"
+          # Check if Teams webhook is configured using organization variable
+          teams_webhook="${{ vars.DIAGRAMS_TEAMS_NOTIFICATION_WEBHOOK }}"
+          
           echo "🔍 Teams webhook configured: $(if [[ -n "$teams_webhook" ]]; then echo "Yes (${#teams_webhook} chars)"; else echo "No"; fi)"
+          echo "🔍 Using organization variable: DIAGRAMS_TEAMS_NOTIFICATION_WEBHOOK"
+          echo "🔍 Variable status: $(if [[ -n "${{ vars.DIAGRAMS_TEAMS_NOTIFICATION_WEBHOOK }}" ]]; then echo "Set"; else echo "Not set"; fi)"
           
           if [[ -n "$teams_webhook" ]]; then
             echo "📤 Sending Teams notification..."
             echo "🔍 Teams webhook URL starts with: $(echo "$teams_webhook" | head -c 50)..."
             
+            # Create JSON payload with proper escaping
             echo "🔍 Sending payload to Teams..."
+            
             response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X POST "$teams_webhook" \
               -H "Content-Type: application/json" \
               -d "{
@@ -442,16 +466,37 @@ jobs:
             
             if [[ "$http_code" -eq 200 ]]; then
               echo "✅ Teams notification sent successfully"
+            elif [[ "$http_code" -eq 202 ]]; then
+              echo "✅ Teams notification accepted (HTTP 202)"
             else
               echo "❌ Failed to send Teams notification (HTTP $http_code)"
-              echo "🔍 Response body: $response_body"
+              echo "🔍 Full response: $response"
+              
+              # Try simplified payload as fallback
+              echo "🔍 Trying simplified Teams payload..."
+              simple_payload="{\"text\":\"📊 Draw.io Processing $status - $processed files processed, $failed failed (Run #${{ github.run_number }})\"}"
+              
+              simple_response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X POST "$teams_webhook" \
+                -H "Content-Type: application/json" \
+                -d "$simple_payload")
+              
+              simple_http_code=$(echo "$simple_response" | grep -o "HTTPSTATUS:[0-9]*" | cut -d: -f2)
+              simple_response_body=$(echo "$simple_response" | sed -E 's/HTTPSTATUS:[0-9]*$//')
+              
+              echo "🔍 Simple payload HTTP Status: $simple_http_code"
+              echo "🔍 Simple payload Response: $simple_response_body"
+              
+              if [[ "$simple_http_code" -eq 200 || "$simple_http_code" -eq 202 ]]; then
+                echo "✅ Teams notification sent successfully (simple format)"
+              else
+                echo "❌ Both Teams notification attempts failed"
+              fi
             fi
           else
-            echo "⚠️ Teams webhook not configured (DIAGRAMS_TEAMS_WEBHOOK variable missing)"
+            echo "⚠️ Teams webhook not configured"
             echo "ℹ️ To enable Teams notifications:"
-            echo "   1. Go to Repository Settings > Variables and secrets > Variables"
-            echo "   2. Add a new variable named 'DIAGRAMS_TEAMS_WEBHOOK'"
-            echo "   3. Set the value to your Teams webhook URL"
+            echo "   Set organization variable: DIAGRAMS_TEAMS_NOTIFICATION_WEBHOOK"
+            echo "   This should contain your Teams webhook URL (no authentication required)"
           fi
           
           echo "📊 Final Summary:"
