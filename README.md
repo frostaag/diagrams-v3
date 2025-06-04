@@ -41,6 +41,44 @@ png_files/             # Generated PNG files
 ### Optional (Teams Notifications)
 - `DIAGRAMS_TEAMS_WEBHOOK` - Teams webhook URL (repository variable)
 
+## 🚀 Quick Deployment
+
+### Option 1: Automated Deployment Script
+```bash
+# Clone the repository
+git clone https://github.com/your-username/diagrams-v3.git
+cd diagrams-v3
+
+# Run the deployment script
+./deploy-to-github.sh
+```
+
+The script will:
+- Check your git configuration
+- Commit any uncommitted changes
+- Add GitHub remote (if not exists)
+- Push to GitHub
+- Provide next steps for configuration
+
+### Option 2: Manual Setup
+1. Create a new GitHub repository
+2. Clone this repository locally
+3. Add your GitHub remote: `git remote add origin <your-repo-url>`
+4. Push: `git push -u origin main`
+5. Configure repository variables and secrets (see SETUP.md)
+
+### Validation & Troubleshooting
+```bash
+# Validate your configuration
+./validate-config.sh
+```
+
+This script checks:
+- Directory structure
+- Git configuration
+- Workflow file validity
+- Provides configuration checklist
+
 ## 🎯 How It Works
 
 ### 1. File Detection
