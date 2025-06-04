@@ -58,15 +58,27 @@ jobs:
           # For push events, only process files that were actually changed in this commit
           if [[ "${{ github.event_name }}" == "push" ]]; then
             echo "🔍 Debug: Push event detected, checking for changed files in this push..."
-            # Get files changed in the current push (between before and after)
-            changed_files=$(git diff --name-only ${{ github.event.before }}..${{ github.event.after }} -- "drawio_files/**/*.drawio" 2>/dev/null || true)
-            echo "🔍 Debug: Push diff (${{ github.event.before }}..${{ github.event.after }}) found: '$changed_files'"
             
-            # Fallback to HEAD^ if the above doesn't work
+            # Try multiple methods to get changed files
+            # Method 1: Use GitHub event before/after SHAs
+            if [[ -n "${{ github.event.before }}" && -n "${{ github.event.after }}" && "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]]; then
+              echo "🔍 Debug: Using GitHub event SHAs..."
+              changed_files=$(git diff --name-only ${{ github.event.before }}..${{ github.event.after }} -- "drawio_files/**/*.drawio" 2>/dev/null || true)
+              echo "🔍 Debug: GitHub event diff found: '$changed_files'"
+            fi
+            
+            # Method 2: Fallback to HEAD^ comparison
             if [[ -z "$changed_files" ]] && git rev-parse --verify HEAD^ >/dev/null 2>&1; then
               echo "🔍 Debug: Fallback - checking git diff HEAD^..HEAD..."
               changed_files=$(git diff --name-only HEAD^..HEAD -- "drawio_files/**/*.drawio" 2>/dev/null || true)
               echo "🔍 Debug: HEAD diff found: '$changed_files'"
+            fi
+            
+            # Method 3: Use git log to find files changed in last commit
+            if [[ -z "$changed_files" ]]; then
+              echo "🔍 Debug: Using git log method..."
+              changed_files=$(git log -1 --name-only --pretty=format: -- "drawio_files/**/*.drawio" 2>/dev/null | grep -v '^$' || true)
+              echo "🔍 Debug: Git log found: '$changed_files'"
             fi
             
             # Additional check: only process files that actually exist
@@ -77,7 +89,7 @@ jobs:
                   existing_files="$existing_files $file"
                 fi
               done
-              changed_files=$(echo "$existing_files" | xargs -n1 2>/dev/null | sort -u | tr '\n' ' ')
+              changed_files=$(echo "$existing_files" | xargs -n1 2>/dev/null | sort -u | tr '\n' ' ' | sed 's/^ *//;s/ *$//')
               echo "🔍 Debug: Filtered to existing files: '$changed_files'"
             fi
           fi
@@ -88,15 +100,6 @@ jobs:
             if [[ -d "drawio_files" ]]; then
               changed_files=$(find drawio_files -name "*.drawio" -type f 2>/dev/null || true)
               echo "🔍 Debug: Found all files for manual dispatch: '$changed_files'"
-            fi
-          fi
-          
-          # Only as last resort, process all files (for first commit scenarios)
-          if [[ -z "$changed_files" ]]; then
-            echo "🔍 Debug: No changed files detected, this might be first commit - processing all files..."
-            if [[ -d "drawio_files" ]]; then
-              changed_files=$(find drawio_files -name "*.drawio" -type f 2>/dev/null || true)
-              echo "🔍 Debug: Found all files as fallback: '$changed_files'"
             fi
           fi
           
