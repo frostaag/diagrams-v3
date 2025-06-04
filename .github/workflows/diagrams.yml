@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - 'drawio_files/**/*.drawio'
+      - 'drawio_files/**'  # Also trigger on folder changes
   workflow_dispatch:
 
 env:
@@ -38,29 +39,28 @@ jobs:
           set +e  # Disable exit on error for the entire script
           echo "🔍 Debug: Starting conversion process..."
           
-          # Ensure directories exist - always recreate if missing
-          if [[ ! -d "png_files" ]]; then
-            echo "📁 png_files directory missing, creating..."
-            mkdir -p png_files
-            echo "📁 Created png_files directory"
+          # FORCE creation of directories and files - always ensure they exist
+          echo "📁 Force ensuring png_files directory exists..."
+          mkdir -p png_files
+          echo "📁 Directory created/verified: png_files"
+          
+          # Force create/verify changelog file with proper header
+          echo "📄 Force ensuring changelog file exists with proper header..."
+          echo "Date,Time,Diagram,Action,Version,Commit,Author,CommitMessage" > png_files/CHANGELOG.csv
+          echo "📄 Changelog file created/reset with proper header"
+          
+          # Verify the files were actually created
+          if [[ -d "png_files" ]]; then
+            echo "✅ png_files directory confirmed to exist"
           else
-            echo "📁 png_files directory exists"
+            echo "❌ CRITICAL: png_files directory still missing after creation!"
           fi
           
-          # Always ensure changelog exists with proper header
-          if [[ ! -f "png_files/CHANGELOG.csv" ]]; then
-            echo "📄 Changelog missing, creating new changelog file..."
-            echo "Date,Time,Diagram,Action,Version,Commit,Author,CommitMessage" > png_files/CHANGELOG.csv
-            echo "📄 Created new changelog file"
+          if [[ -f "png_files/CHANGELOG.csv" ]]; then
+            echo "✅ CHANGELOG.csv confirmed to exist"
+            echo "� Changelog header: $(head -n 1 png_files/CHANGELOG.csv)"
           else
-            echo "📄 Using existing changelog file"
-            # Verify changelog has proper header
-            first_line=$(head -n 1 png_files/CHANGELOG.csv 2>/dev/null || echo "")
-            if [[ "$first_line" != "Date,Time,Diagram,Action,Version,Commit,Author,CommitMessage" ]]; then
-              echo "📄 Changelog header invalid, recreating..."
-              echo "Date,Time,Diagram,Action,Version,Commit,Author,CommitMessage" > png_files/CHANGELOG.csv
-              echo "📄 Recreated changelog with proper header"
-            fi
+            echo "❌ CRITICAL: CHANGELOG.csv missing after creation!"
           fi
           
           echo "🔍 Debug: Checking for draw.io files..."
@@ -365,7 +365,7 @@ jobs:
           exit 0
 
       - name: Commit Changes
-        if: steps.convert.outputs.processed != '0'
+        if: always()  # Always run this step to ensure files are committed
         run: |
           echo "🔍 Debug: Preparing to commit changes..."
           echo "🔍 Debug: Processed count: ${{ steps.convert.outputs.processed }}"
@@ -387,11 +387,39 @@ jobs:
           
           echo "🔍 Debug: Checking if there are staged changes..."
           if git diff --staged --quiet; then
-            echo "⚠️ No changes to commit - this might indicate an issue"
-            echo "🔍 Debug: Staged files:"
-            git diff --staged --name-only || echo "No staged files"
-            echo "🔍 Debug: Working directory changes:"
-            git diff --name-only || echo "No working directory changes"
+            echo "⚠️ No staged changes detected"
+            echo "🔍 Debug: Checking if png_files directory has any files to commit..."
+            
+            # Check if png_files directory exists and has files
+            if [[ -d "png_files" ]] && [[ -n "$(ls -A png_files/)" ]]; then
+              echo "📁 png_files directory has content but no staged changes detected"
+              echo "🔍 Debug: Force adding png_files directory..."
+              git add png_files/ --force
+              
+              echo "🔍 Debug: Checking staged changes after force add..."
+              if git diff --staged --quiet; then
+                echo "⚠️ Still no staged changes after force add"
+                echo "🔍 Debug: Files in png_files:"
+                ls -la png_files/
+                echo "🔍 Debug: Git status:"
+                git status --porcelain
+              else
+                echo "✅ Force add successful, committing..."
+                echo "🔍 Debug: Files to be committed:"
+                git diff --staged --name-only
+                
+                git commit -m "Create PNG files directory and changelog [skip ci]"
+                echo "✅ Committed successfully"
+                
+                echo "🔍 Debug: Pushing to remote..."
+                git push
+                echo "✅ Pushed successfully"
+              fi
+            else
+              echo "⚠️ No png_files directory or content to commit"
+              echo "🔍 Debug: Directory exists: $(test -d png_files && echo "yes" || echo "no")"
+              echo "🔍 Debug: Directory content: $(ls png_files/ 2>/dev/null || echo "empty/missing")"
+            fi
           else
             echo "✅ Changes detected, committing..."
             echo "🔍 Debug: Files to be committed:"
