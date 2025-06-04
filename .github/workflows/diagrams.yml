@@ -96,7 +96,8 @@ jobs:
           
           echo "🔄 Starting conversion process..."
           
-          while IFS= read -r file; do
+          # Process each file individually
+          for file in $changed_files; do
             [[ -z "$file" ]] && continue
             
             basename=$(basename "$file" .drawio)
@@ -114,16 +115,19 @@ jobs:
               echo "🎨 Running draw.io conversion..."
               
               # Run draw.io conversion and capture output
-              conversion_output=$(xvfb-run --auto-servernum --server-args="-screen 0 1024x768x24" drawio -x -f png -s 2.0 -o "$png_file" "$file" 2>&1)
-              conversion_exit_code=$?
+              conversion_output=""
+              if conversion_output=$(xvfb-run --auto-servernum --server-args="-screen 0 1024x768x24" drawio -x -f png -s 2.0 -o "$png_file" "$file" 2>&1); then
+                conversion_success="true"
+              else
+                conversion_success="false"
+              fi
               
               echo "🔍 Draw.io output: $conversion_output"
-              echo "🔍 Exit code: $conversion_exit_code"
+              echo "🔍 Conversion success: $conversion_success"
               
               # Check if conversion was successful by verifying the output file
-              # Note: draw.io may exit with code 1 even on successful conversion
               if [[ -f "$png_file" && -s "$png_file" ]]; then
-                file_size=$(stat -f%z "$png_file" 2>/dev/null || stat -c%s "$png_file" 2>/dev/null || echo "unknown")
+                file_size=$(stat -c%s "$png_file" 2>/dev/null || stat -f%z "$png_file" 2>/dev/null || echo "unknown")
                 echo "✅ Successfully converted $basename (${file_size} bytes)"
                 action="Converted to PNG"
                 ((processed_count++))
@@ -137,9 +141,9 @@ jobs:
             fi
             
             # Add to changelog
-            echo "${current_date},${current_time},\"${basename}\",\"${action}\",\"1.0\",\"${commit_hash}\",\"${author_name}\",\"${commit_message}\"" >> png_files/CHANGELOG.csv
+            echo "${current_date},${current_time},\"${basename}\",\"${action}\",\"1.0\",\"${commit_hash}\",\"${author_name}\",\"${commit_message}\"" >> png_files/CHANGELOG.csv || true
             
-          done <<< "$changed_files"
+          done
           
           echo "📊 Conversion Summary:"
           echo "✅ Successfully processed: $processed_count files"
