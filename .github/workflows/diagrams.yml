@@ -38,19 +38,46 @@ jobs:
           set +e  # Disable exit on error for the entire script
           echo "🔍 Debug: Starting conversion process..."
           
-          # Ensure directories exist
-          mkdir -p png_files
-          echo "📁 Created/verified png_files directory"
+          # Ensure directories exist - always recreate if missing
+          if [[ ! -d "png_files" ]]; then
+            echo "📁 png_files directory missing, creating..."
+            mkdir -p png_files
+            echo "📁 Created png_files directory"
+          else
+            echo "📁 png_files directory exists"
+          fi
           
-          # Initialize changelog if it doesn't exist
+          # Always ensure changelog exists with proper header
           if [[ ! -f "png_files/CHANGELOG.csv" ]]; then
+            echo "📄 Changelog missing, creating new changelog file..."
             echo "Date,Time,Diagram,Action,Version,Commit,Author,CommitMessage" > png_files/CHANGELOG.csv
             echo "📄 Created new changelog file"
           else
             echo "📄 Using existing changelog file"
+            # Verify changelog has proper header
+            first_line=$(head -n 1 png_files/CHANGELOG.csv 2>/dev/null || echo "")
+            if [[ "$first_line" != "Date,Time,Diagram,Action,Version,Commit,Author,CommitMessage" ]]; then
+              echo "📄 Changelog header invalid, recreating..."
+              echo "Date,Time,Diagram,Action,Version,Commit,Author,CommitMessage" > png_files/CHANGELOG.csv
+              echo "📄 Recreated changelog with proper header"
+            fi
           fi
           
           echo "🔍 Debug: Checking for draw.io files..."
+          
+          # Check if png_files folder was recreated (empty or missing PNG files)
+          png_count=$(ls png_files/*.png 2>/dev/null | wc -l || echo 0)
+          drawio_count=$(find drawio_files -name "*.drawio" -type f 2>/dev/null | wc -l || echo 0)
+          
+          echo "🔍 Debug: Found $png_count PNG files and $drawio_count drawio files"
+          
+          # If png_files folder was deleted/recreated, we need to regenerate all PNGs
+          folder_was_recreated=false
+          if [[ $png_count -eq 0 && $drawio_count -gt 0 ]]; then
+            echo "📄 PNG files missing but drawio files exist - folder was likely deleted"
+            echo "🔄 Will regenerate all PNG files from existing drawio files"
+            folder_was_recreated=true
+          fi
           
           # Get changed draw.io files - improved logic for only changed files
           changed_files=""
@@ -154,6 +181,22 @@ jobs:
             if [[ -d "drawio_files" ]]; then
               changed_files=$(find drawio_files -name "*.drawio" -type f 2>/dev/null || true)
               echo "🔍 Debug: Found all files for manual dispatch: '$changed_files'"
+            fi
+          fi
+          
+          # If png_files folder was recreated, process all drawio files to regenerate PNGs
+          if [[ "$folder_was_recreated" == "true" ]]; then
+            echo "🔄 PNG folder was recreated - processing all drawio files to regenerate PNGs..."
+            if [[ -d "drawio_files" ]]; then
+              all_drawio_files=$(find drawio_files -name "*.drawio" -type f 2>/dev/null || true)
+              if [[ -n "$all_drawio_files" ]]; then
+                changed_files="$all_drawio_files"
+                echo "🔍 Debug: Will regenerate all PNG files: '$changed_files'"
+              else
+                echo "⚠️ No drawio files found to regenerate PNGs from"
+              fi
+            else
+              echo "⚠️ drawio_files directory not found"
             fi
           fi
           
