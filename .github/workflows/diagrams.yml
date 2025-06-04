@@ -58,6 +58,8 @@ jobs:
           # For push events, only process files that were actually changed in this commit
           if [[ "${{ github.event_name }}" == "push" ]]; then
             echo "🔍 Debug: Push event detected, checking for changed files in this push..."
+            echo "🔍 Debug: Event before SHA: '${{ github.event.before }}'"
+            echo "🔍 Debug: Event after SHA: '${{ github.event.after }}'"
             
             # Try multiple methods to get changed files
             # Method 1: Use GitHub event before/after SHAs
@@ -79,6 +81,38 @@ jobs:
               echo "🔍 Debug: Using git log method..."
               changed_files=$(git log -1 --name-only --pretty=format: -- "drawio_files/**/*.drawio" 2>/dev/null | grep -v '^$' || true)
               echo "🔍 Debug: Git log found: '$changed_files'"
+            fi
+            
+            # Method 4: Use git show to get files from current commit
+            if [[ -z "$changed_files" ]]; then
+              echo "🔍 Debug: Using git show method..."
+              changed_files=$(git show --name-only --pretty=format: HEAD -- "drawio_files/**/*.drawio" 2>/dev/null | grep -v '^$' || true)
+              echo "🔍 Debug: Git show found: '$changed_files'"
+            fi
+            
+            # Method 5: Check for files modified in the push using git log with range
+            if [[ -z "$changed_files" ]] && [[ -n "${{ github.event.before }}" && "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]]; then
+              echo "🔍 Debug: Using git log range method..."
+              changed_files=$(git log --name-only --pretty=format: ${{ github.event.before }}..${{ github.event.after }} -- "drawio_files/**/*.drawio" 2>/dev/null | grep -v '^$' | sort -u || true)
+              echo "🔍 Debug: Git log range found: '$changed_files'"
+            fi
+            
+            # Method 6: For new repositories or when all else fails, check if this is a new file addition
+            if [[ -z "$changed_files" ]]; then
+              echo "🔍 Debug: Checking for recently added files..."
+              # Get all drawio files and check their git status
+              all_drawio_files=$(find drawio_files -name "*.drawio" -type f 2>/dev/null || true)
+              echo "🔍 Debug: All drawio files found: '$all_drawio_files'"
+              
+              for file in $all_drawio_files; do
+                # Check if file was added in the last commit
+                if git log -1 --name-status --pretty=format: HEAD 2>/dev/null | grep -q "^A[[:space:]]\\+${file}$"; then
+                  echo "🔍 Debug: File $file was added in last commit"
+                  changed_files="$changed_files $file"
+                fi
+              done
+              changed_files=$(echo "$changed_files" | xargs -n1 2>/dev/null | sort -u | tr '\n' ' ' | sed 's/^ *//;s/ *$//' || true)
+              echo "🔍 Debug: Found added files: '$changed_files'"
             fi
             
             # Additional check: only process files that actually exist
