@@ -204,6 +204,13 @@ jobs:
             echo "❌ No .drawio files found to process"
             echo "🔍 Debug: Contents of drawio_files directory:"
             ls -la drawio_files/ || echo "Directory doesn't exist"
+            echo "🔍 Debug: Event name: ${{ github.event_name }}"
+            echo "🔍 Debug: Repository structure:"
+            find . -name "*.drawio" -type f 2>/dev/null || echo "No .drawio files found anywhere"
+            echo "🔍 Debug: Git status:"
+            git status --porcelain || echo "Git status failed"
+            echo "🔍 Debug: Recent commits:"
+            git log --oneline -5 || echo "Git log failed"
             echo "processed=0" >> $GITHUB_OUTPUT
             exit 0
           fi
@@ -318,8 +325,18 @@ jobs:
               fi
             fi
             
-            # Add to changelog with proper version
-            echo "${current_date},${current_time},\"${basename}\",\"${action}\",\"${version}\",\"${commit_hash}\",\"${author_name}\",\"${commit_message}\"" >> png_files/CHANGELOG.csv || true
+          # Add to changelog with proper version
+          changelog_entry="${current_date},${current_time},\"${basename}\",\"${action}\",\"${version}\",\"${commit_hash}\",\"${author_name}\",\"${commit_message}\""
+          echo "🔍 Debug: Adding changelog entry: $changelog_entry"
+          echo "$changelog_entry" >> png_files/CHANGELOG.csv
+          
+          # Verify the entry was added
+          if tail -n 1 png_files/CHANGELOG.csv | grep -q "$basename"; then
+            echo "✅ Changelog entry added successfully"
+          else
+            echo "❌ Failed to add changelog entry"
+            echo "🔍 Debug: Last line of changelog: $(tail -n 1 png_files/CHANGELOG.csv)"
+          fi
             
           done
           
@@ -350,14 +367,42 @@ jobs:
       - name: Commit Changes
         if: steps.convert.outputs.processed != '0'
         run: |
+          echo "🔍 Debug: Preparing to commit changes..."
+          echo "🔍 Debug: Processed count: ${{ steps.convert.outputs.processed }}"
+          
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
+          
+          echo "🔍 Debug: Current git status before adding:"
+          git status
+          
+          echo "🔍 Debug: Contents of png_files directory:"
+          ls -la png_files/ || echo "png_files directory doesn't exist"
+          
+          echo "🔍 Debug: Adding png_files to git..."
           git add png_files/
+          
+          echo "🔍 Debug: Git status after adding:"
+          git status
+          
+          echo "🔍 Debug: Checking if there are staged changes..."
           if git diff --staged --quiet; then
-            echo "No changes to commit"
+            echo "⚠️ No changes to commit - this might indicate an issue"
+            echo "🔍 Debug: Staged files:"
+            git diff --staged --name-only || echo "No staged files"
+            echo "🔍 Debug: Working directory changes:"
+            git diff --name-only || echo "No working directory changes"
           else
+            echo "✅ Changes detected, committing..."
+            echo "🔍 Debug: Files to be committed:"
+            git diff --staged --name-only
+            
             git commit -m "Generate PNG files and update changelog [skip ci]"
+            echo "✅ Committed successfully"
+            
+            echo "🔍 Debug: Pushing to remote..."
             git push
+            echo "✅ Pushed successfully"
           fi
 
       - name: Upload to SharePoint
