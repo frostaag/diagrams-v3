@@ -13,3 +13,6 @@ Date,Time,Diagram,Action,Version,Commit,Author,CommitMessage
 04.06.2025,11:44:05,"3","Converted to PNG","1.1","f328c83","Lucas Dreger","Update 3.drawio"
 04.06.2025,11:45:31,"4","Converted to PNG","1.1","6ead3b4","Lucas Dreger","Added 4.drawio"
 04.06.2025,11:58:17,"4","Converted to PNG","1.1","e1e846e","Lucas Dreger","Update 4.drawio"
+04.06.2025,14:46:00,"5","Converted to PNG","🔍 Debug: Last version found for 5: ''
+🔍 Debug: No previous version found, starting at 1.0
+1.0","e1c2834","Lucas Dreger","Added 5.drawio"
