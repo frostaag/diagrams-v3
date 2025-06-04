@@ -517,27 +517,40 @@ jobs:
           # Get git information
           commit_hash=$(git log -1 --format="%h" 2>/dev/null || echo "unknown")
           commit_full_hash=$(git log -1 --format="%H" 2>/dev/null || echo "unknown")
-          author_display_name=$(git log -1 --format="%an" 2>/dev/null || echo "${{ github.actor }}")
           commit_message=$(git log -1 --format="%s" 2>/dev/null || echo "Manual processing")
           
-          # Get processed diagram names
-          diagrams_list=""
-          if [[ -f "png_files/CHANGELOG.csv" ]]; then
-            # Get the last few entries from changelog to show which diagrams were processed
-            recent_diagrams=$(tail -n 5 png_files/CHANGELOG.csv | grep -v "Date,Time,Diagram" | cut -d',' -f3 | tr -d '"' | sort -u | head -3 || echo "")
-            if [[ -n "$recent_diagrams" ]]; then
-              diagrams_list=$(echo "$recent_diagrams" | tr '\n' ', ' | sed 's/,$//')
+          # Get author with fallback: display name -> email -> github actor
+          author_display_name=$(git log -1 --format="%an" 2>/dev/null || echo "")
+          author_email=$(git log -1 --format="%ae" 2>/dev/null || echo "")
+          
+          # Use display name, fallback to email if display name is empty or generic
+          if [[ -z "$author_display_name" || "$author_display_name" == "GitHub" || "$author_display_name" == "github-actions" ]]; then
+            if [[ -n "$author_email" && "$author_email" != "noreply@github.com" ]]; then
+              author_info="$author_email"
+            else
+              author_info="${{ github.actor }}"
             fi
+          else
+            author_info="$author_display_name"
           fi
           
-          if [[ -z "$diagrams_list" ]]; then
-            diagrams_list="Unknown diagrams"
+          # Get processed diagram name (single diagram per commit)
+          diagram_name=""
+          if [[ -f "png_files/CHANGELOG.csv" ]]; then
+            # Get the most recent diagram from changelog
+            diagram_name=$(tail -n 1 png_files/CHANGELOG.csv | cut -d',' -f3 | tr -d '"' 2>/dev/null || echo "")
+          fi
+          
+          if [[ -z "$diagram_name" || "$diagram_name" == "Diagram" ]]; then
+            diagram_name="Unknown diagram"
           fi
           
           echo "🔍 Debug: commit_hash=$commit_hash"
           echo "🔍 Debug: author_display_name=$author_display_name"
+          echo "🔍 Debug: author_email=$author_email"
+          echo "🔍 Debug: author_info=$author_info"
           echo "🔍 Debug: commit_message=$commit_message"
-          echo "🔍 Debug: diagrams_list=$diagrams_list"
+          echo "🔍 Debug: diagram_name=$diagram_name"
           
           # Check if Teams webhook is configured using organization variable
           teams_webhook="${{ vars.DIAGRAMS_TEAMS_NOTIFICATION_WEBHOOK }}"
@@ -567,9 +580,10 @@ jobs:
               summary_text="No diagrams found to process"
             fi
             
-            # Escape commit message for JSON
+            # Escape commit message and diagram name for JSON
             escaped_commit_message=$(echo "$commit_message" | sed 's/"/\\"/g' | sed "s/'/\\'/g")
-            escaped_diagrams=$(echo "$diagrams_list" | sed 's/"/\\"/g')
+            escaped_diagram_name=$(echo "$diagram_name" | sed 's/"/\\"/g')
+            escaped_author_info=$(echo "$author_info" | sed 's/"/\\"/g')
             
             response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X POST "$teams_webhook" \
               -H "Content-Type: application/json" \
@@ -583,10 +597,10 @@ jobs:
                 \"sections\": [{
                   \"activityTitle\": \"📋 Processing Details\",
                   \"facts\": [
-                    {\"name\": \"👤 Author\", \"value\": \"$author_display_name\"},
+                    {\"name\": \"👤 Author\", \"value\": \"$escaped_author_info\"},
                     {\"name\": \"📝 Commit\", \"value\": \"$commit_hash\"},
                     {\"name\": \"💬 Message\", \"value\": \"$escaped_commit_message\"},
-                    {\"name\": \"📊 Diagrams\", \"value\": \"$escaped_diagrams\"},
+                    {\"name\": \"📊 Diagram\", \"value\": \"$escaped_diagram_name\"},
                     {\"name\": \"✅ Processed\", \"value\": \"$processed\"},
                     {\"name\": \"❌ Failed\", \"value\": \"$failed\"},
                     {\"name\": \"🔄 Run\", \"value\": \"#${{ github.run_number }}\"}
