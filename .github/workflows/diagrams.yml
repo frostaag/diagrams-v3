@@ -385,90 +385,95 @@ jobs:
               echo "🔍 Debug: Using Drive ID: '$drive_id'"
               echo "🔍 Debug: Drive ID length: ${#drive_id}"
               
-              # Method 1: Try simple upload to root first (most likely to work)
-              echo "🔍 Debug: Method 1 - Trying simple upload to site root..."
+              # Method 1: Ensure Diagrams folder exists and upload there
+              echo "🔍 Debug: Method 1 - Ensuring Diagrams folder exists..."
               graph_site_url="${tenant_domain}:/sites/${site_name}:"
               
-              simple_response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X PUT \
-                "https://graph.microsoft.com/v1.0/sites/${graph_site_url}/drives/${drive_id}/root:/Diagrams_Changelog.csv:/content" \
+              # First, check if Diagrams folder exists
+              folder_check=$(curl -s -w "HTTPSTATUS:%{http_code}" -X GET \
+                "https://graph.microsoft.com/v1.0/sites/${graph_site_url}/drives/${drive_id}/root:/Diagrams" \
+                -H "Authorization: Bearer $ACCESS_TOKEN")
+              
+              folder_check_code=$(echo "$folder_check" | grep -o "HTTPSTATUS:[0-9]*" | cut -d: -f2)
+              echo "🔍 Debug: Folder check HTTP Status: $folder_check_code"
+              
+              if [[ "$folder_check_code" -ne 200 ]]; then
+                echo "🔍 Debug: Creating Diagrams folder..."
+                create_folder=$(curl -s -w "HTTPSTATUS:%{http_code}" -X POST \
+                  "https://graph.microsoft.com/v1.0/sites/${graph_site_url}/drives/${drive_id}/root/children" \
+                  -H "Authorization: Bearer $ACCESS_TOKEN" \
+                  -H "Content-Type: application/json" \
+                  -d '{"name": "Diagrams", "folder": {}}')
+                
+                create_folder_code=$(echo "$create_folder" | grep -o "HTTPSTATUS:[0-9]*" | cut -d: -f2)
+                create_folder_body=$(echo "$create_folder" | sed -E 's/HTTPSTATUS:[0-9]*$//')
+                echo "🔍 Debug: Create folder HTTP Status: $create_folder_code"
+                echo "🔍 Debug: Create folder Response: $create_folder_body"
+                
+                if [[ "$create_folder_code" -ne 200 && "$create_folder_code" -ne 201 ]]; then
+                  echo "❌ Failed to create Diagrams folder"
+                fi
+              else
+                echo "🔍 Debug: Diagrams folder already exists"
+              fi
+              
+              # Now try uploading to Diagrams folder (primary method)
+              echo "🔍 Debug: Uploading to Diagrams folder..."
+              diagrams_response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X PUT \
+                "https://graph.microsoft.com/v1.0/sites/${graph_site_url}/drives/${drive_id}/root:/Diagrams/Diagrams_Changelog.csv:/content" \
                 -H "Authorization: Bearer $ACCESS_TOKEN" \
                 -H "Content-Type: text/csv" \
                 --data-binary @png_files/CHANGELOG.csv)
               
-              simple_http_code=$(echo "$simple_response" | grep -o "HTTPSTATUS:[0-9]*" | cut -d: -f2)
-              simple_response_body=$(echo "$simple_response" | sed -E 's/HTTPSTATUS:[0-9]*$//')
+              diagrams_http_code=$(echo "$diagrams_response" | grep -o "HTTPSTATUS:[0-9]*" | cut -d: -f2)
+              diagrams_response_body=$(echo "$diagrams_response" | sed -E 's/HTTPSTATUS:[0-9]*$//')
               
-              echo "🔍 Debug: Simple upload HTTP Status: $simple_http_code"
-              echo "🔍 Debug: Simple upload Response: $simple_response_body"
+              echo "🔍 Debug: Diagrams folder upload HTTP Status: $diagrams_http_code"
+              echo "🔍 Debug: Diagrams folder upload Response: $diagrams_response_body"
               
-              if [[ "$simple_http_code" -eq 200 || "$simple_http_code" -eq 201 ]]; then
-                echo "✅ Uploaded changelog to SharePoint root directory"
+              if [[ "$diagrams_http_code" -eq 200 || "$diagrams_http_code" -eq 201 ]]; then
+                echo "✅ Uploaded changelog to SharePoint Diagrams folder"
               else
-                echo "❌ Failed simple upload (HTTP $simple_http_code)"
+                echo "❌ Failed upload to Diagrams folder (HTTP $diagrams_http_code)"
                 
-                # Method 2: Try with folder creation
-                echo "🔍 Debug: Method 2 - Trying with folder creation..."
-                
-                # First, check if Diagrams folder exists
-                folder_check=$(curl -s -w "HTTPSTATUS:%{http_code}" -X GET \
-                  "https://graph.microsoft.com/v1.0/sites/${graph_site_url}/drives/${drive_id}/root:/Diagrams" \
-                  -H "Authorization: Bearer $ACCESS_TOKEN")
-                
-                folder_check_code=$(echo "$folder_check" | grep -o "HTTPSTATUS:[0-9]*" | cut -d: -f2)
-                echo "🔍 Debug: Folder check HTTP Status: $folder_check_code"
-                
-                if [[ "$folder_check_code" -ne 200 ]]; then
-                  echo "🔍 Debug: Creating Diagrams folder..."
-                  create_folder=$(curl -s -w "HTTPSTATUS:%{http_code}" -X POST \
-                    "https://graph.microsoft.com/v1.0/sites/${graph_site_url}/drives/${drive_id}/root/children" \
-                    -H "Authorization: Bearer $ACCESS_TOKEN" \
-                    -H "Content-Type: application/json" \
-                    -d '{"name": "Diagrams", "folder": {}}')
-                  
-                  create_folder_code=$(echo "$create_folder" | grep -o "HTTPSTATUS:[0-9]*" | cut -d: -f2)
-                  create_folder_body=$(echo "$create_folder" | sed -E 's/HTTPSTATUS:[0-9]*$//')
-                  echo "🔍 Debug: Create folder HTTP Status: $create_folder_code"
-                  echo "🔍 Debug: Create folder Response: $create_folder_body"
-                fi
-                
-                # Try uploading to Diagrams folder
-                diagrams_response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X PUT \
-                  "https://graph.microsoft.com/v1.0/sites/${graph_site_url}/drives/${drive_id}/root:/Diagrams/Diagrams_Changelog.csv:/content" \
+                # Method 2: Try direct drive access to Diagrams folder
+                echo "🔍 Debug: Method 2 - Trying direct drive access to Diagrams folder..."
+                direct_diagrams_response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X PUT \
+                  "https://graph.microsoft.com/v1.0/drives/${drive_id}/root:/Diagrams/Diagrams_Changelog.csv:/content" \
                   -H "Authorization: Bearer $ACCESS_TOKEN" \
                   -H "Content-Type: text/csv" \
                   --data-binary @png_files/CHANGELOG.csv)
                 
-                diagrams_http_code=$(echo "$diagrams_response" | grep -o "HTTPSTATUS:[0-9]*" | cut -d: -f2)
-                diagrams_response_body=$(echo "$diagrams_response" | sed -E 's/HTTPSTATUS:[0-9]*$//')
+                direct_diagrams_http_code=$(echo "$direct_diagrams_response" | grep -o "HTTPSTATUS:[0-9]*" | cut -d: -f2)
+                direct_diagrams_response_body=$(echo "$direct_diagrams_response" | sed -E 's/HTTPSTATUS:[0-9]*$//')
                 
-                echo "🔍 Debug: Diagrams folder upload HTTP Status: $diagrams_http_code"
-                echo "🔍 Debug: Diagrams folder upload Response: $diagrams_response_body"
+                echo "🔍 Debug: Direct Diagrams HTTP Status: $direct_diagrams_http_code"
+                echo "🔍 Debug: Direct Diagrams Response: $direct_diagrams_response_body"
                 
-                if [[ "$diagrams_http_code" -eq 200 || "$diagrams_http_code" -eq 201 ]]; then
-                  echo "✅ Uploaded changelog to SharePoint Diagrams folder"
+                if [[ "$direct_diagrams_http_code" -eq 200 || "$direct_diagrams_http_code" -eq 201 ]]; then
+                  echo "✅ Uploaded changelog to SharePoint Diagrams folder (direct access)"
                 else
-                  echo "❌ Failed upload to Diagrams folder (HTTP $diagrams_http_code)"
+                  echo "❌ Failed direct upload to Diagrams folder (HTTP $direct_diagrams_http_code)"
                   
-                  # Method 3: Try direct drive access (no site context)
-                  echo "🔍 Debug: Method 3 - Trying direct drive access..."
-                  direct_response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X PUT \
+                  # Method 3: Last resort - upload to root with clear naming
+                  echo "🔍 Debug: Method 3 - Last resort upload to root..."
+                  root_response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X PUT \
                     "https://graph.microsoft.com/v1.0/drives/${drive_id}/root:/Diagrams_Changelog.csv:/content" \
                     -H "Authorization: Bearer $ACCESS_TOKEN" \
                     -H "Content-Type: text/csv" \
                     --data-binary @png_files/CHANGELOG.csv)
                   
-                  direct_http_code=$(echo "$direct_response" | grep -o "HTTPSTATUS:[0-9]*" | cut -d: -f2)
-                  direct_response_body=$(echo "$direct_response" | sed -E 's/HTTPSTATUS:[0-9]*$//')
+                  root_http_code=$(echo "$root_response" | grep -o "HTTPSTATUS:[0-9]*" | cut -d: -f2)
+                  root_response_body=$(echo "$root_response" | sed -E 's/HTTPSTATUS:[0-9]*$//')
                   
-                  echo "🔍 Debug: Direct drive HTTP Status: $direct_http_code"
-                  echo "🔍 Debug: Direct drive Response: $direct_response_body"
+                  echo "🔍 Debug: Root upload HTTP Status: $root_http_code"
+                  echo "🔍 Debug: Root upload Response: $root_response_body"
                   
-                  if [[ "$direct_http_code" -eq 200 || "$direct_http_code" -eq 201 ]]; then
-                    echo "✅ Uploaded changelog to SharePoint (direct drive access)"
+                  if [[ "$root_http_code" -eq 200 || "$root_http_code" -eq 201 ]]; then
+                    echo "⚠️ Uploaded changelog to SharePoint root (fallback - please move to Diagrams folder)"
                   else
                     echo "❌ All SharePoint upload methods failed"
-                    echo "🔍 Debug: Please verify the DIAGRAMS_SHAREPOINT_DRIVE_ID is correct"
-                    echo "🔍 Debug: Also verify the app has Files.ReadWrite.All permissions"
+                    echo "🔍 Debug: Please verify permissions and configuration"
                   fi
                 fi
               fi
@@ -488,6 +493,11 @@ jobs:
     if: always()
     
     steps:
+      - name: Checkout for Teams Notification
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          
       - name: Send Teams Notification
         continue-on-error: true
         run: |
@@ -504,6 +514,31 @@ jobs:
           processed="${{ needs.process.outputs.processed || '0' }}"
           failed="${{ needs.process.outputs.failed || '0' }}"
           
+          # Get git information
+          commit_hash=$(git log -1 --format="%h" 2>/dev/null || echo "unknown")
+          commit_full_hash=$(git log -1 --format="%H" 2>/dev/null || echo "unknown")
+          author_display_name=$(git log -1 --format="%an" 2>/dev/null || echo "${{ github.actor }}")
+          commit_message=$(git log -1 --format="%s" 2>/dev/null || echo "Manual processing")
+          
+          # Get processed diagram names
+          diagrams_list=""
+          if [[ -f "png_files/CHANGELOG.csv" ]]; then
+            # Get the last few entries from changelog to show which diagrams were processed
+            recent_diagrams=$(tail -n 5 png_files/CHANGELOG.csv | grep -v "Date,Time,Diagram" | cut -d',' -f3 | tr -d '"' | sort -u | head -3 || echo "")
+            if [[ -n "$recent_diagrams" ]]; then
+              diagrams_list=$(echo "$recent_diagrams" | tr '\n' ', ' | sed 's/,$//')
+            fi
+          fi
+          
+          if [[ -z "$diagrams_list" ]]; then
+            diagrams_list="Unknown diagrams"
+          fi
+          
+          echo "🔍 Debug: commit_hash=$commit_hash"
+          echo "🔍 Debug: author_display_name=$author_display_name"
+          echo "🔍 Debug: commit_message=$commit_message"
+          echo "🔍 Debug: diagrams_list=$diagrams_list"
+          
           # Check if Teams webhook is configured using organization variable
           teams_webhook="${{ vars.DIAGRAMS_TEAMS_NOTIFICATION_WEBHOOK }}"
           
@@ -518,61 +553,58 @@ jobs:
             # Create JSON payload with proper escaping
             echo "🔍 Sending payload to Teams..."
             
-            # Get detailed file information for Teams notification
-            processed_files=""
-            failed_files=""
-            if [[ "$processed" != "0" ]]; then
-              processed_files="✅ Successfully converted diagrams to PNG"
-            fi
-            if [[ "$failed" != "0" ]]; then
-              failed_files="❌ $failed files failed to convert"
-            fi
+            # Simplified title
+            simple_title="📊 Draw.io Processing Complete"
             
-            # Build status summary
+            # Build summary text
             if [[ "$processed" != "0" && "$failed" == "0" ]]; then
-              summary_text="All $processed diagram(s) successfully converted to PNG format"
+              summary_text="Successfully processed $processed diagram(s)"
             elif [[ "$processed" != "0" && "$failed" != "0" ]]; then
-              summary_text="Mixed results: $processed successful, $failed failed conversions"
+              summary_text="Processed $processed, failed $failed diagram(s)"
             elif [[ "$processed" == "0" && "$failed" != "0" ]]; then
-              summary_text="All $failed diagram(s) failed to convert"
+              summary_text="Failed to process $failed diagram(s)"
             else
               summary_text="No diagrams found to process"
             fi
+            
+            # Escape commit message for JSON
+            escaped_commit_message=$(echo "$commit_message" | sed 's/"/\\"/g' | sed "s/'/\\'/g")
+            escaped_diagrams=$(echo "$diagrams_list" | sed 's/"/\\"/g')
             
             response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X POST "$teams_webhook" \
               -H "Content-Type: application/json" \
               -d "{
                 \"@type\": \"MessageCard\",
                 \"@context\": \"https://schema.org/extensions\",
-                \"summary\": \"Draw.io Processing $status\",
+                \"summary\": \"$simple_title\",
                 \"themeColor\": \"$color\",
-                \"title\": \"📊 Draw.io Processing V3 - $summary_text\",
-                \"text\": \"**Processing Results:** $status\\n\\n$summary_text\",
+                \"title\": \"$simple_title\",
+                \"text\": \"**Status:** $status - $summary_text\",
                 \"sections\": [{
-                  \"activityTitle\": \"📈 Processing Statistics\",
+                  \"activityTitle\": \"📋 Processing Details\",
                   \"facts\": [
-                    {\"name\": \"✅ Files Successfully Processed\", \"value\": \"$processed\"},
-                    {\"name\": \"❌ Files Failed\", \"value\": \"$failed\"},
-                    {\"name\": \"🔄 Workflow Run\", \"value\": \"#${{ github.run_number }}\"},
-                    {\"name\": \"🌿 Branch\", \"value\": \"${{ github.ref_name }}\"},
-                    {\"name\": \"👤 Triggered By\", \"value\": \"${{ github.actor }}\"},
-                    {\"name\": \"📅 Timestamp\", \"value\": \"$(date -u +'%Y-%m-%d %H:%M:%S UTC')\"},
-                    {\"name\": \"💾 Repository\", \"value\": \"${{ github.repository }}\"}
+                    {\"name\": \"👤 Author\", \"value\": \"$author_display_name\"},
+                    {\"name\": \"📝 Commit\", \"value\": \"$commit_hash\"},
+                    {\"name\": \"💬 Message\", \"value\": \"$escaped_commit_message\"},
+                    {\"name\": \"📊 Diagrams\", \"value\": \"$escaped_diagrams\"},
+                    {\"name\": \"✅ Processed\", \"value\": \"$processed\"},
+                    {\"name\": \"❌ Failed\", \"value\": \"$failed\"},
+                    {\"name\": \"🔄 Run\", \"value\": \"#${{ github.run_number }}\"}
                   ]
                 }],
                 \"potentialAction\": [{
                   \"@type\": \"OpenUri\",
-                  \"name\": \"🔍 View Workflow Details\",
+                  \"name\": \"🔍 View Details\",
                   \"targets\": [{
                     \"os\": \"default\",
                     \"uri\": \"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"
                   }]
                 }, {
                   \"@type\": \"OpenUri\",
-                  \"name\": \"📁 View Repository\",
+                  \"name\": \"📁 View Commit\",
                   \"targets\": [{
                     \"os\": \"default\",
-                    \"uri\": \"${{ github.server_url }}/${{ github.repository }}\"
+                    \"uri\": \"${{ github.server_url }}/${{ github.repository }}/commit/$commit_full_hash\"
                   }]
                 }]
               }")
