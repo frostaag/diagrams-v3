@@ -112,20 +112,25 @@ jobs:
             else
               # Convert to PNG with better error handling
               echo "🎨 Running draw.io conversion..."
-              if xvfb-run --auto-servernum --server-args="-screen 0 1024x768x24" drawio -x -f png -s 2.0 -o "$png_file" "$file" 2>&1; then
-                # Verify file was created and is not empty
-                if [[ -f "$png_file" && -s "$png_file" ]]; then
-                  file_size=$(stat -f%z "$png_file" 2>/dev/null || stat -c%s "$png_file" 2>/dev/null || echo "unknown")
-                  echo "✅ Successfully converted $basename (${file_size} bytes)"
-                  action="Converted to PNG"
-                  ((processed_count++))
-                else
-                  echo "❌ PNG file created but is empty: $basename"
-                  action="Failed - Empty PNG"
-                  ((failed_count++))
-                fi
+              
+              # Run draw.io conversion and capture output
+              conversion_output=$(xvfb-run --auto-servernum --server-args="-screen 0 1024x768x24" drawio -x -f png -s 2.0 -o "$png_file" "$file" 2>&1)
+              conversion_exit_code=$?
+              
+              echo "🔍 Draw.io output: $conversion_output"
+              echo "🔍 Exit code: $conversion_exit_code"
+              
+              # Check if conversion was successful by verifying the output file
+              # Note: draw.io may exit with code 1 even on successful conversion
+              if [[ -f "$png_file" && -s "$png_file" ]]; then
+                file_size=$(stat -f%z "$png_file" 2>/dev/null || stat -c%s "$png_file" 2>/dev/null || echo "unknown")
+                echo "✅ Successfully converted $basename (${file_size} bytes)"
+                action="Converted to PNG"
+                ((processed_count++))
               else
-                echo "❌ draw.io conversion failed for: $basename"
+                echo "❌ PNG conversion failed for: $basename"
+                echo "🔍 Debug: PNG file exists: $(test -f "$png_file" && echo "yes" || echo "no")"
+                echo "🔍 Debug: PNG file size: $(test -s "$png_file" && echo "non-zero" || echo "zero/missing")"
                 action="Failed - Conversion Error"
                 ((failed_count++))
               fi

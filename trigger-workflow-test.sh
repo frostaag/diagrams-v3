@@ -6,23 +6,23 @@ echo "🚀 Triggering Draw.io to PNG workflow test..."
 # Make a small change to one of the .drawio files to trigger the workflow
 echo "📝 Making a small change to trigger workflow..."
 
-# Update the modification timestamp in the sample diagram
-sed -i.bak 's/modified="[^"]*"/modified="'$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")'"/' drawio_files/sample-diagram.drawio
+# Update the modification timestamp in the 1.drawio file
+sed -i.bak 's/modified="[^"]*"/modified="'$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")'"/' drawio_files/1.drawio
 
 # Check if the change was made
 if [[ $? -eq 0 ]]; then
-    echo "✅ Updated sample-diagram.drawio timestamp"
+    echo "✅ Updated 1.drawio timestamp"
 else
-    echo "❌ Failed to update sample-diagram.drawio"
+    echo "❌ Failed to update 1.drawio"
     exit 1
 fi
 
 # Add and commit the change
 echo "📦 Committing changes to trigger workflow..."
-git add drawio_files/sample-diagram.drawio
+git add drawio_files/1.drawio
 git commit -m "Test: Update diagram timestamp to trigger workflow
 
-This commit updates the modification timestamp in sample-diagram.drawio 
+This commit updates the modification timestamp in 1.drawio 
 to trigger the automated PNG conversion workflow for testing purposes."
 
 # Push the changes
