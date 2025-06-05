@@ -43,8 +43,8 @@ DIAGRAMS_SAP_BTP_REPOSITORY_ID
 - **DIAGRAMS_SAP_BTP_REPOSITORY_ID**: Repository ID (optional, uses default if not set)
 
 **Example SAP BTP URLs:**
-- Token URL: `https://your-subdomain.authentication.eu10.hana.ondemand.com/oauth/token`
-- DM Base URL: `https://api-sdm-di.cfapps.eu10.hana.ondemand.com/v2`
+- Token URL: `https://frosta-apps-dev.authentication.eu10.hana.ondemand.com/oauth/token`
+- DM Base URL: `https://api-sdm-di.cfapps.eu10.hana.ondemand.com`
 
 ### GitHub Repository Secrets
 

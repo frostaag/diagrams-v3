@@ -649,6 +649,10 @@ jobs:
           
           if [[ -n "$sap_token_url" && -n "$sap_client_id" && -n "$sap_dm_base_url" ]]; then
             echo "📤 Getting SAP BTP access token..."
+            echo "🔍 Debug: Token URL: $(echo "$sap_token_url" | sed 's/\(.*\)\/oauth\/token.*/\1\/oauth\/token/')"
+            echo "🔍 Debug: Client ID: $(echo "$sap_client_id" | head -c 10)..."
+            echo "🔍 Debug: Client Secret configured: $(if [[ -n "${{ secrets.DIAGRAMS_SAP_BTP_CLIENT_SECRET }}" ]]; then echo "Yes (${#{{ secrets.DIAGRAMS_SAP_BTP_CLIENT_SECRET }}} chars)"; else echo "No"; fi)"
+            echo "🔍 Debug: DM Base URL: $sap_dm_base_url"
             
             # Get access token for SAP BTP Document Management
             sap_token_response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X POST "$sap_token_url" \
