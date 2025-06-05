@@ -37,9 +37,14 @@ Go to your GitHub repository → Settings → Secrets and variables → Actions
    https://api-sdm-di.cfapps.eu10.hana.ondemand.com
    ```
 
-### Organization Secret:
+4. **DIAGRAMS_SAP_BTP_REPOSITORY_ID** (IMPORTANT - NEW!)
+   ```
+   06b87f25-1e4e-4dfb-8fbb-e5132d74f064
+   ```
 
-4. **DIAGRAMS_SAP_BTP_CLIENT_SECRET**
+And this **Secret**:
+
+5. **DIAGRAMS_SAP_BTP_CLIENT_SECRET**
    ```
    2c7ee8e5-794e-419e-96a8-01aa08ca82d5$TyiKc7U0DRD2WtgXOPJtsq_MsuyaibhyXdX_4yD9cII=
    ```
@@ -51,6 +56,8 @@ Go to your GitHub repository → Settings → Secrets and variables → Actions
 2. **Correct Client Secret**: Make sure you're using the exact value from the service key, including the `$` and `=` characters.
 
 3. **DM Base URL**: Remove the trailing slash - use `https://api-sdm-di.cfapps.eu10.hana.ondemand.com` instead of `https://api-sdm-di.cfapps.eu10.hana.ondemand.com/`
+
+4. **Repository ID**: This is crucial! The workflow needs your specific repository ID (`06b87f25-1e4e-4dfb-8fbb-e5132d74f064`) to construct the correct API paths. Without this, it tries to use the generic `/browser/objects/root/` which doesn't work with your setup.
 
 ## Verification
 
@@ -74,3 +81,14 @@ Your complete service key for reference:
 ```
 
 The workflow is already properly configured to handle the special characters in the client ID and secret through multiple authentication methods.
+
+## Critical Fix: Repository ID
+
+The main issue was that the workflow was using the wrong API endpoints. Your Postman success shows you need:
+- Working URL: `https://api-sdm-di.cfapps.eu10.hana.ondemand.com/browser/06b87f25-1e4e-4dfb-8fbb-e5132d74f064/root`
+- Previous URL: `https://api-sdm-di.cfapps.eu10.hana.ondemand.com/browser/objects/root/`
+
+The workflow has been updated to:
+1. Use the repository ID when configured: `/browser/{repository_id}/root`
+2. Fall back to the generic path when not configured: `/browser/objects/root`
+3. Construct upload URLs correctly based on the API structure

@@ -794,10 +794,20 @@ jobs:
                 
                 echo "📁 Ensuring Diagrams folder exists in SAP Document Management..."
                 
+                # Use repository ID if configured, otherwise default to root
+                if [[ -n "$sap_repository_id" ]]; then
+                  echo "🔍 Debug: Using configured repository ID: $sap_repository_id"
+                  sap_root_path="/browser/${sap_repository_id}/root"
+                else
+                  echo "🔍 Debug: No repository ID configured, using default root"
+                  sap_root_path="/browser/objects/root"
+                fi
+                
                 # Always check for existing Diagrams folder first
                 echo "🔍 Debug: Searching for existing Diagrams folder..."
+                echo "🔍 Debug: API URL: ${sap_dm_base_url}${sap_root_path}/children"
                 folders_response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X GET \
-                  "${sap_dm_base_url}/browser/objects/root/children?filter=objectType%20eq%20'folder'%20and%20name%20eq%20'Diagrams'" \
+                  "${sap_dm_base_url}${sap_root_path}/children?filter=objectType%20eq%20'folder'%20and%20name%20eq%20'Diagrams'" \
                   -H "Authorization: Bearer $sap_access_token" \
                   -H "Accept: application/json")
                 
@@ -819,9 +829,10 @@ jobs:
                 # If folder doesn't exist or couldn't be found, create it
                 if [[ -z "$diagrams_folder_id" || "$diagrams_folder_id" == "null" ]]; then
                   echo "📁 Creating Diagrams folder in SAP Document Management..."
+                  echo "🔍 Debug: Create folder URL: ${sap_dm_base_url}${sap_root_path}/children"
                   
                   create_folder_response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X POST \
-                    "${sap_dm_base_url}/browser/objects/root/children" \
+                    "${sap_dm_base_url}${sap_root_path}/children" \
                     -H "Authorization: Bearer $sap_access_token" \
                     -H "Content-Type: application/json" \
                     -H "Accept: application/json" \
@@ -843,7 +854,7 @@ jobs:
                     # Folder already exists (conflict), try to find it again
                     echo "📁 Diagrams folder already exists (HTTP 409), searching again..."
                     retry_folders_response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X GET \
-                      "${sap_dm_base_url}/browser/objects/root/children?filter=objectType%20eq%20'folder'%20and%20name%20eq%20'Diagrams'" \
+                      "${sap_dm_base_url}${sap_root_path}/children?filter=objectType%20eq%20'folder'%20and%20name%20eq%20'Diagrams'" \
                       -H "Authorization: Bearer $sap_access_token" \
                       -H "Accept: application/json")
                     
@@ -863,10 +874,16 @@ jobs:
                   fi
                 fi
                 
-                # Final fallback: use root if we still don't have a folder ID
+                # Final fallback: use appropriate root path if we still don't have a folder ID
                 if [[ -z "$diagrams_folder_id" || "$diagrams_folder_id" == "null" ]]; then
                   echo "⚠️ Could not create or find Diagrams folder, using root as fallback"
-                  diagrams_folder_id="root"
+                  if [[ -n "$sap_repository_id" ]]; then
+                    diagrams_folder_id="${sap_repository_id}/root"
+                    echo "🔍 Debug: Using repository root: $diagrams_folder_id"
+                  else
+                    diagrams_folder_id="root"
+                    echo "🔍 Debug: Using default root: $diagrams_folder_id"
+                  fi
                 else
                   echo "📁 Using Diagrams folder for uploads: $diagrams_folder_id"
                 fi
@@ -884,8 +901,19 @@ jobs:
                     file_size=$(stat -c%s "$png_file" 2>/dev/null || stat -f%z "$png_file" 2>/dev/null || echo "0")
                     
                     # First, create the document object
+                    # Construct the correct URL based on whether we have a folder ID or are using root
+                    if [[ "$diagrams_folder_id" == *"/root" ]]; then
+                      # Using repository root
+                      upload_url="${sap_dm_base_url}/browser/${diagrams_folder_id}/children"
+                    else
+                      # Using a specific folder ID
+                      upload_url="${sap_dm_base_url}/browser/objects/${diagrams_folder_id}/children"
+                    fi
+                    
+                    echo "🔍 Debug: Upload URL: $upload_url"
+                    
                     create_doc_response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X POST \
-                      "${sap_dm_base_url}/browser/objects/${diagrams_folder_id}/children" \
+                      "$upload_url" \
                       -H "Authorization: Bearer $sap_access_token" \
                       -H "Content-Type: application/json" \
                       -H "Accept: application/json" \
