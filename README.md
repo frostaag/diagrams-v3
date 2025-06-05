@@ -1,246 +1,214 @@
-# Draw.io Files Processing V3 - Ultra Simplified
+# Diagrams Automation System V3
 
-This is a **completely redesigned and ultra-simplified** workflow for processing Draw.io diagram files. V3 focuses on the core requirements with maximum simplicity and reliability.
+Automated Draw.io to PNG conversion with enterprise integrations for SharePoint, SAP BTP Document Management, and Teams notifications.
 
-## ✨ What V3 Does (Simple & Clean)
+## 🚀 Features
 
-1. **🔄 Converts Draw.io to PNG** - Automatically converts .drawio files to PNG on commit
-2. **📋 Updates Changelog** - Tracks all changes in a simple CSV format
-3. **☁️ Uploads to SharePoint** - Sends changelog to SharePoint using repository variables
-4. **📢 Teams Notifications** - Sends processing results to Microsoft Teams
+- **Automatic PNG Conversion**: Convert Draw.io files to high-quality PNG images
+- **Smart File Detection**: Only processes changed files for efficiency
+- **Version Management**: Automatic version incrementing with changelog tracking
+- **SharePoint Integration**: Upload changelog to SharePoint document libraries
+- **SAP BTP Integration**: Upload PNG files to SAP Document Management Service
+- **Teams Notifications**: Rich notifications with diagram details and links
+- **Naming Convention**: Structured file naming for technology stacks and detail levels
 
-## 🚀 Key Simplifications in V3
-
-- **No complex ID assignment** - Files keep their original names
-- **No version tracking files** - Simple version 1.0 for all entries
-- **No separate scripts** - Everything in one workflow file
-- **No cleanup logic** - Clean, straightforward processing
-- **Unified job structure** - Process and notify in separate jobs
-
-## 📁 Project Structure
+## 📁 Repository Structure
 
 ```
-drawio_files/          # Your Draw.io files (.drawio)
-png_files/             # Generated PNG files
-├── CHANGELOG.csv      # Simple processing log
-└── *.png              # Converted diagrams
-.github/workflows/
-└── diagrams.yml       # Single workflow file
+diagrams-v3/
+├── .github/workflows/
+│   └── diagrams.yml           # Main workflow automation
+├── drawio_files/              # Source .drawio files (input)
+│   └── [x.y.description].drawio
+├── png_files/                 # Generated PNG files (output)
+│   ├── [x.y.description].png
+│   └── CHANGELOG.csv         # Processing history
+├── HOW-TO-CREATE-DIAGRAMS.md # Team guide for creating diagrams
+├── CONFIGURATION-GUIDE.md    # Complete setup instructions
+├── TEAMS_SETUP.md            # Teams integration guide
+└── README.md                 # This file
 ```
 
-## 🔧 Setup Requirements
+## 🎯 Quick Start
 
-### Repository Variables (Required)
-- `DIAGRAMS_SHAREPOINT_TENANT_ID` - Your Azure tenant ID
-- `DIAGRAMS_SHAREPOINT_CLIENT_ID` - SharePoint app client ID  
-- `DIAGRAMS_SHAREPOINT_DRIVE_ID` - SharePoint drive ID
+### For Diagram Creators
 
-### Repository Secrets (Required)
-- `DIAGRAMS_SHAREPOINT_CLIENTSECRET` - SharePoint app client secret
+1. **Create Diagram**: Use [draw.io](https://app.diagrams.net/) connected to this GitHub repository
+2. **Follow Naming**: Use pattern `x.y.description.drawio` (see [naming guide](HOW-TO-CREATE-DIAGRAMS.md))
+3. **Save to Repository**: Save files in the `drawio_files/` folder
+4. **Automatic Processing**: Workflow automatically converts to PNG and manages versions
 
-### Optional (Teams Notifications)
-- `DIAGRAMS_TEAMS_WEBHOOK` - Teams webhook URL (repository variable)
+### For Administrators
 
-## 🚀 Quick Deployment
+1. **Configure Variables**: Set up GitHub organization variables (see [Configuration Guide](CONFIGURATION-GUIDE.md))
+2. **Set Secrets**: Add required secrets for integrations
+3. **Test Workflow**: Create a test diagram to verify all integrations work
+4. **Train Team**: Share the [How-To Guide](HOW-TO-CREATE-DIAGRAMS.md) with your team
 
-### Option 1: Automated Deployment Script
-```bash
-# Clone the repository
-git clone https://github.com/your-username/diagrams-v3.git
-cd diagrams-v3
+## 📋 File Naming Convention
 
-# Run the deployment script
-./deploy-to-github.sh
+**Pattern**: `x.y.description.drawio`
+
+### Technology Stack IDs (x):
+- `0` = Multi-tech / Cross-platform
+- `1` = Cloud (Microsoft/Google)
+- `2` = Network architecture  
+- `3` = SAP systems
+
+### Detail Levels (y):
+- `1` = High-level overview
+- `2` = Intermediate detail
+- `3` = Detailed technical
+
+### Examples:
+- `1.1.Azure Cloud Strategy Overview.drawio`
+- `3.2.SAP S4HANA Integration Architecture.drawio`
+- `2.3.Network Security Implementation Details.drawio`
+
+## 🔧 Configuration Required
+
+### GitHub Variables (Organization Level)
+```
+DIAGRAMS_TEAMS_NOTIFICATION_WEBHOOK     # Teams webhook URL
+DIAGRAMS_SHAREPOINT_TENANT_ID           # Azure AD tenant ID
+DIAGRAMS_SHAREPOINT_CLIENT_ID           # Azure app client ID
+DIAGRAMS_SHAREPOINT_URL                 # SharePoint site URL
+DIAGRAMS_SAP_BTP_TOKEN_URL              # SAP BTP OAuth token URL
+DIAGRAMS_SAP_BTP_CLIENT_ID              # SAP BTP client ID
+DIAGRAMS_SAP_BTP_DM_BASE_URL            # SAP Document Management API URL
 ```
 
-The script will:
-- Check your git configuration
-- Commit any uncommitted changes
-- Add GitHub remote (if not exists)
-- Push to GitHub
-- Provide next steps for configuration
-
-### Option 2: Manual Setup
-1. Create a new GitHub repository
-2. Clone this repository locally
-3. Add your GitHub remote: `git remote add origin <your-repo-url>`
-4. Push: `git push -u origin main`
-5. Configure repository variables and secrets (see SETUP.md)
-
-### Validation & Troubleshooting
-```bash
-# Validate your configuration
-./validate-config.sh
+### GitHub Secrets (Repository Level)
+```
+DIAGRAMS_SHAREPOINT_CLIENTSECRET        # Azure app client secret
+DIAGRAMS_SAP_BTP_CLIENT_SECRET          # SAP BTP client secret
 ```
 
-This script checks:
-- Directory structure
-- Git configuration
-- Workflow file validity
-- Provides configuration checklist
+## 🔄 Workflow Process
 
-## 🎯 How It Works
+When you save a `.drawio` file:
 
-### 1. File Detection
-- Triggered on commits to `drawio_files/**/*.drawio`
-- Uses Git to detect changed files
-- Processes all files on first run
+1. **🔍 Detection**: GitHub Actions detects new/changed diagram files
+2. **🎨 Conversion**: Converts `.drawio` to high-quality PNG (2x scale)
+3. **📊 Versioning**: Automatically increments version numbers
+4. **📝 Changelog**: Updates processing history with metadata
+5. **☁️ SharePoint**: Uploads changelog to SharePoint (if configured)
+6. **🔗 SAP BTP**: Uploads PNG files to Document Management (if configured)
+7. **📢 Teams**: Sends rich notification with diagram details (if configured)
+8. **💾 Commit**: Commits all generated files back to repository
 
-### 2. PNG Conversion
-- Uses Draw.io v26.2.2 for conversion
-- 2.0x scale for high quality
-- Simple success/failure tracking
+## 📖 Documentation
 
-### 3. Changelog Format
-```csv
-Date,Time,Diagram,Action,Version,Commit,Author
-03.06.2025,14:30:15,"my-diagram","Converted to PNG","1.0","abc123","Lucas Dreger"
-```
+- **[How to Create Diagrams](HOW-TO-CREATE-DIAGRAMS.md)**: Complete guide for team members
+- **[Configuration Guide](CONFIGURATION-GUIDE.md)**: Setup instructions for all integrations
+- **[Teams Setup](TEAMS_SETUP.md)**: Specific guidance for Teams notifications
 
-### 4. SharePoint Upload
-- Uploads to: `/Diagrams/Diagrams_Changelog.csv`
-- Uses Microsoft Graph API
-- Automatic retry with continue-on-error
+## 🔧 Integrations
 
-### 5. Teams Notification
-- Separate job that runs after processing
-- Shows success/failure status
-- Includes file count and workflow link
-
-## 🔄 Workflow Trigger Options
-
-### Automatic (Recommended)
-```bash
-# Just commit your .drawio files
-git add drawio_files/my-diagram.drawio
-git commit -m "Add new diagram"
-git push
-```
-
-### Manual Trigger
-1. Go to **Actions** tab in GitHub
-2. Select **Draw.io to PNG Processing V3**
-3. Click **Run workflow**
-
-## 📊 Monitoring
-
-### GitHub Actions
-- Check the **Actions** tab for workflow runs
-- View detailed logs for each step
-- Monitor processing statistics
+### Microsoft Teams
+- Rich notifications with diagram details
+- Success/failure status with file counts
+- Direct links to workflow runs and commits
+- Parsed diagram names showing technology and detail level
 
 ### SharePoint
-- Changelog automatically uploaded to SharePoint
-- Available at: `Documents/Diagrams/Diagrams_Changelog.csv`
+- Automatic changelog upload to designated folder
+- Creates "Diagrams" folder if it doesn't exist
+- Supports both site-specific and drive-specific uploads
+- Comprehensive error handling with multiple fallback methods
 
-### Teams (Optional)
-- Real-time notifications on processing status
-- Includes links to workflow runs
-- Shows file processing counts
+### SAP BTP Document Management
+- PNG file upload to structured folder hierarchy
+- Automatic folder creation for organization
+- OAuth2 authentication with service keys
+- Metadata inclusion for searchability
 
-## 🛠️ Configuration
+## 🚦 Status Indicators
 
-All configuration is embedded in the workflow file with sensible defaults:
+The workflow provides detailed status information:
 
-```yaml
-env:
-  DRAWIO_VERSION: "26.2.2"  # Draw.io version to use
-```
+- ✅ **Success**: All files processed successfully
+- ⚠️ **Partial**: Some files processed, some failed
+- ❌ **Failed**: No files processed successfully
+- 📊 **Counts**: Number of files processed vs failed
 
-PNG conversion settings are hardcoded for simplicity:
-- **Scale**: 2.0x (high quality)
-- **Format**: PNG
-- **Quality**: Maximum
+## 🔐 Security
 
-## 🔄 Migration from V2
+- Uses GitHub secrets for sensitive credentials
+- OAuth2 authentication for external services
+- Minimum required permissions for integrations
+- No secrets exposed in logs or workflow outputs
 
-V3 is a complete rewrite with simplified approach:
-
-### Key Changes
-- ❌ **Removed**: Complex ID assignment system
-- ❌ **Removed**: Version tracking files (.versions, .counter)
-- ❌ **Removed**: Separate shell scripts
-- ❌ **Removed**: Duplicate cleanup logic
-- ❌ **Removed**: Complex error handling
-- ✅ **Added**: Simplified two-job workflow (process + notify)
-- ✅ **Added**: Streamlined changelog format
-- ✅ **Added**: Direct SharePoint integration in workflow
-
-### What Stays the Same
-- ✅ Draw.io file detection and conversion
-- ✅ SharePoint upload functionality  
-- ✅ Teams notifications
-- ✅ Changelog tracking
-- ✅ Repository variables/secrets usage
-
-## 🎯 Use Cases
-
-**Perfect for:**
-- Simple diagram processing workflows
-- Teams that want reliable PNG generation
-- Projects that need SharePoint integration
-- Minimal maintenance overhead
-
-**Consider V2 if you need:**
-- Complex versioning schemes
-- File ID assignment logic
-- Advanced error recovery
-- Custom processing scripts
-
-## 🚦 Troubleshooting
+## 🐛 Troubleshooting
 
 ### Common Issues
 
-1. **No PNGs generated**
-   - Check if .drawio files are valid
-   - Verify workflow triggered correctly
-   - Review Actions logs for errors
+**Files not processing:**
+- Check file naming follows `x.y.description.drawio` pattern
+- Ensure files are in `drawio_files/` folder
+- Verify file actually changed in the commit
 
-2. **SharePoint upload fails**
-   - Verify all repository variables are set
-   - Check client secret is valid
-   - Ensure drive ID is correct
+**Integration failures:**
+- Check GitHub Actions logs for detailed error messages
+- Verify all required variables and secrets are set
+- Confirm external service credentials are valid
 
-3. **Teams notifications not working**
-   - Verify webhook URL is set in repository variables
-   - Check webhook is active in Teams
+**Teams notifications not received:**
+- Verify webhook URL is correct and active
+- Check Teams channel allows webhook connectors
 
-### Debug Steps
+### Debug Information
 
-1. **Check workflow logs**
-   ```
-   Actions → Latest run → View details
-   ```
+The workflow provides extensive logging:
+- Configuration status for each integration
+- File processing details and timings
+- HTTP response codes and error messages
+- Authentication and authorization status
 
-2. **Verify file changes**
-   ```bash
-   git log --oneline -- drawio_files/
-   ```
+## 📊 Example Output
 
-3. **Test SharePoint access**
-   - Verify tenant/client IDs in repository settings
-   - Check app permissions in Azure
+### Generated Files
+```
+png_files/
+├── 1.1.Azure Cloud Strategy Overview.png
+├── 3.2.SAP S4HANA Integration Architecture.png
+└── CHANGELOG.csv
+```
 
-## 📈 Performance
+### Changelog Entry
+```csv
+Date,Time,Diagram,Action,Version,Commit,Author,CommitMessage
+06.01.2025,14:30:15,"1.1.Azure Cloud Strategy Overview","Converted to PNG","1.0","a1b2c3d","John Doe","Added new cloud architecture diagram"
+```
 
-- **Typical processing time**: 2-3 minutes per workflow run
-- **Concurrent processing**: Files processed sequentially for reliability
-- **Resource usage**: Standard GitHub Actions runner
-- **Rate limits**: Respects GitHub and SharePoint API limits
+### Teams Notification
+```
+📊 Draw.io Processing Complete
+Status: ✅ Success - Successfully processed 1 diagram(s)
+
+📋 Processing Details
+👤 Author: John Doe
+📝 Commit: a1b2c3d
+💬 Message: Added new cloud architecture diagram
+📊 Diagram: 📊 Azure Cloud Strategy Overview (Cloud, High-level)
+✅ Processed: 1
+❌ Failed: 0
+🔄 Run: #42
+```
 
 ## 🤝 Contributing
 
-V3 prioritizes simplicity over features:
+1. Test changes with the manual workflow dispatch first
+2. Follow the established naming convention
+3. Update documentation if adding new features
+4. Ensure all integrations continue to work
 
-1. Keep the single workflow file approach
-2. Avoid adding external dependencies
-3. Maintain the simple changelog format
-4. Test changes with sample .drawio files
-5. Update documentation for any changes
+## 📄 License
+
+This project is designed for enterprise use with draw.io diagrams automation.
 
 ---
 
 **Version**: 3.0  
-**Status**: Production Ready  
-**Philosophy**: Simplicity over complexity  
-**Last Updated**: June 2025
+**Last Updated**: January 2025  
+**Compatibility**: GitHub Actions, Draw.io, SharePoint, SAP BTP, Microsoft Teams

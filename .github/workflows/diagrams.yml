@@ -630,6 +630,218 @@ jobs:
             echo "🔍 Debug: ACCESS_TOKEN starts with: $(echo "$ACCESS_TOKEN" | head -c 20)..."
           fi
 
+      - name: Upload PNG files to SAP BTP Document Management
+        if: steps.convert.outputs.processed != '0'
+        continue-on-error: true
+        run: |
+          echo "🔍 Starting SAP BTP Document Management upload..."
+          
+          # Check if SAP BTP variables are configured
+          sap_token_url="${{ vars.DIAGRAMS_SAP_BTP_TOKEN_URL }}"
+          sap_client_id="${{ vars.DIAGRAMS_SAP_BTP_CLIENT_ID }}"
+          sap_dm_base_url="${{ vars.DIAGRAMS_SAP_BTP_DM_BASE_URL }}"
+          sap_repository_id="${{ vars.DIAGRAMS_SAP_BTP_REPOSITORY_ID }}"
+          
+          echo "🔍 Debug: SAP BTP Token URL configured: $(if [[ -n "$sap_token_url" ]]; then echo "Yes"; else echo "No"; fi)"
+          echo "🔍 Debug: SAP BTP Client ID configured: $(if [[ -n "$sap_client_id" ]]; then echo "Yes"; else echo "No"; fi)"
+          echo "🔍 Debug: SAP BTP DM Base URL configured: $(if [[ -n "$sap_dm_base_url" ]]; then echo "Yes"; else echo "No"; fi)"
+          echo "🔍 Debug: SAP BTP Repository ID configured: $(if [[ -n "$sap_repository_id" ]]; then echo "Yes"; else echo "No"; fi)"
+          
+          if [[ -n "$sap_token_url" && -n "$sap_client_id" && -n "$sap_dm_base_url" ]]; then
+            echo "📤 Getting SAP BTP access token..."
+            
+            # Get access token for SAP BTP Document Management
+            sap_token_response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X POST "$sap_token_url" \
+              -H "Content-Type: application/x-www-form-urlencoded" \
+              -d "grant_type=client_credentials" \
+              -d "client_id=$sap_client_id" \
+              -d "client_secret=${{ secrets.DIAGRAMS_SAP_BTP_CLIENT_SECRET }}")
+            
+            sap_token_http_code=$(echo "$sap_token_response" | grep -o "HTTPSTATUS:[0-9]*" | cut -d: -f2)
+            sap_token_response_body=$(echo "$sap_token_response" | sed -E 's/HTTPSTATUS:[0-9]*$//')
+            
+            echo "🔍 Debug: SAP BTP token HTTP Status: $sap_token_http_code"
+            
+            if [[ "$sap_token_http_code" -eq 200 ]]; then
+              sap_access_token=$(echo "$sap_token_response_body" | jq -r '.access_token' 2>/dev/null || echo "")
+              
+              if [[ -n "$sap_access_token" && "$sap_access_token" != "null" ]]; then
+                echo "✅ SAP BTP access token obtained successfully"
+                echo "🔍 Debug: Token length: ${#sap_access_token}"
+                
+                # Ensure Diagrams folder exists in SAP DM (check and create on every run)
+                diagrams_folder_id=""
+                
+                echo "📁 Ensuring Diagrams folder exists in SAP Document Management..."
+                
+                # Always check for existing Diagrams folder first
+                echo "🔍 Debug: Searching for existing Diagrams folder..."
+                folders_response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X GET \
+                  "${sap_dm_base_url}/browser/objects/root/children?filter=objectType%20eq%20'folder'%20and%20name%20eq%20'Diagrams'" \
+                  -H "Authorization: Bearer $sap_access_token" \
+                  -H "Accept: application/json")
+                
+                folders_http_code=$(echo "$folders_response" | grep -o "HTTPSTATUS:[0-9]*" | cut -d: -f2)
+                folders_response_body=$(echo "$folders_response" | sed -E 's/HTTPSTATUS:[0-9]*$//')
+                
+                echo "🔍 Debug: Folders search HTTP Status: $folders_http_code"
+                
+                if [[ "$folders_http_code" -eq 200 ]]; then
+                  # Check if Diagrams folder exists
+                  folder_count=$(echo "$folders_response_body" | jq -r '.objects | length' 2>/dev/null || echo "0")
+                  
+                  if [[ "$folder_count" -gt 0 ]]; then
+                    diagrams_folder_id=$(echo "$folders_response_body" | jq -r '.objects[0].id' 2>/dev/null || echo "")
+                    echo "✅ Found existing Diagrams folder: $diagrams_folder_id"
+                  fi
+                fi
+                
+                # If folder doesn't exist or couldn't be found, create it
+                if [[ -z "$diagrams_folder_id" || "$diagrams_folder_id" == "null" ]]; then
+                  echo "📁 Creating Diagrams folder in SAP Document Management..."
+                  
+                  create_folder_response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X POST \
+                    "${sap_dm_base_url}/browser/objects/root/children" \
+                    -H "Authorization: Bearer $sap_access_token" \
+                    -H "Content-Type: application/json" \
+                    -H "Accept: application/json" \
+                    -d '{
+                      "name": "Diagrams",
+                      "description": "Automatically generated diagram files from GitHub workflow",
+                      "objectType": "folder"
+                    }')
+                  
+                  create_folder_http_code=$(echo "$create_folder_response" | grep -o "HTTPSTATUS:[0-9]*" | cut -d: -f2)
+                  create_folder_response_body=$(echo "$create_folder_response" | sed -E 's/HTTPSTATUS:[0-9]*$//')
+                  
+                  echo "🔍 Debug: Create folder HTTP Status: $create_folder_http_code"
+                  
+                  if [[ "$create_folder_http_code" -eq 201 ]]; then
+                    diagrams_folder_id=$(echo "$create_folder_response_body" | jq -r '.id' 2>/dev/null || echo "")
+                    echo "✅ Successfully created Diagrams folder: $diagrams_folder_id"
+                  elif [[ "$create_folder_http_code" -eq 409 ]]; then
+                    # Folder already exists (conflict), try to find it again
+                    echo "📁 Diagrams folder already exists (HTTP 409), searching again..."
+                    retry_folders_response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X GET \
+                      "${sap_dm_base_url}/browser/objects/root/children?filter=objectType%20eq%20'folder'%20and%20name%20eq%20'Diagrams'" \
+                      -H "Authorization: Bearer $sap_access_token" \
+                      -H "Accept: application/json")
+                    
+                    retry_folders_http_code=$(echo "$retry_folders_response" | grep -o "HTTPSTATUS:[0-9]*" | cut -d: -f2)
+                    retry_folders_response_body=$(echo "$retry_folders_response" | sed -E 's/HTTPSTATUS:[0-9]*$//')
+                    
+                    if [[ "$retry_folders_http_code" -eq 200 ]]; then
+                      retry_folder_count=$(echo "$retry_folders_response_body" | jq -r '.objects | length' 2>/dev/null || echo "0")
+                      if [[ "$retry_folder_count" -gt 0 ]]; then
+                        diagrams_folder_id=$(echo "$retry_folders_response_body" | jq -r '.objects[0].id' 2>/dev/null || echo "")
+                        echo "✅ Found Diagrams folder after conflict: $diagrams_folder_id"
+                      fi
+                    fi
+                  else
+                    echo "❌ Failed to create Diagrams folder (HTTP $create_folder_http_code)"
+                    echo "🔍 Debug: Response: $create_folder_response_body"
+                  fi
+                fi
+                
+                # Final fallback: use root if we still don't have a folder ID
+                if [[ -z "$diagrams_folder_id" || "$diagrams_folder_id" == "null" ]]; then
+                  echo "⚠️ Could not create or find Diagrams folder, using root as fallback"
+                  diagrams_folder_id="root"
+                else
+                  echo "📁 Using Diagrams folder for uploads: $diagrams_folder_id"
+                fi
+                
+                # Upload PNG files to SAP Document Management
+                upload_count=0
+                failed_upload_count=0
+                
+                for png_file in png_files/*.png; do
+                  if [[ -f "$png_file" ]]; then
+                    filename=$(basename "$png_file")
+                    echo "📤 Uploading $filename to SAP Document Management..."
+                    
+                    # Get file metadata for upload
+                    file_size=$(stat -c%s "$png_file" 2>/dev/null || stat -f%z "$png_file" 2>/dev/null || echo "0")
+                    
+                    # First, create the document object
+                    create_doc_response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X POST \
+                      "${sap_dm_base_url}/browser/objects/${diagrams_folder_id}/children" \
+                      -H "Authorization: Bearer $sap_access_token" \
+                      -H "Content-Type: application/json" \
+                      -H "Accept: application/json" \
+                      -d "{
+                        \"name\": \"$filename\",
+                        \"description\": \"Automatically generated diagram from GitHub workflow\",
+                        \"objectType\": \"document\",
+                        \"contentType\": \"image/png\"
+                      }")
+                    
+                    create_doc_http_code=$(echo "$create_doc_response" | grep -o "HTTPSTATUS:[0-9]*" | cut -d: -f2)
+                    create_doc_response_body=$(echo "$create_doc_response" | sed -E 's/HTTPSTATUS:[0-9]*$//')
+                    
+                    echo "🔍 Debug: Create document HTTP Status: $create_doc_http_code"
+                    
+                    if [[ "$create_doc_http_code" -eq 201 ]]; then
+                      document_id=$(echo "$create_doc_response_body" | jq -r '.id' 2>/dev/null || echo "")
+                      
+                      if [[ -n "$document_id" && "$document_id" != "null" ]]; then
+                        echo "📄 Created document object: $document_id"
+                        
+                        # Upload the actual file content
+                        upload_response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X PUT \
+                          "${sap_dm_base_url}/browser/objects/${document_id}/content" \
+                          -H "Authorization: Bearer $sap_access_token" \
+                          -H "Content-Type: image/png" \
+                          --data-binary @"$png_file")
+                        
+                        upload_http_code=$(echo "$upload_response" | grep -o "HTTPSTATUS:[0-9]*" | cut -d: -f2)
+                        upload_response_body=$(echo "$upload_response" | sed -E 's/HTTPSTATUS:[0-9]*$//')
+                        
+                        echo "🔍 Debug: File upload HTTP Status: $upload_http_code"
+                        
+                        if [[ "$upload_http_code" -eq 200 || "$upload_http_code" -eq 201 ]]; then
+                          echo "✅ Successfully uploaded $filename to SAP Document Management"
+                          ((upload_count++))
+                        else
+                          echo "❌ Failed to upload file content for $filename (HTTP $upload_http_code)"
+                          echo "🔍 Debug: Upload response: $upload_response_body"
+                          ((failed_upload_count++))
+                        fi
+                      else
+                        echo "❌ Could not extract document ID from response"
+                        ((failed_upload_count++))
+                      fi
+                    else
+                      echo "❌ Failed to create document object for $filename (HTTP $create_doc_http_code)"
+                      echo "🔍 Debug: Create doc response: $create_doc_response_body"
+                      ((failed_upload_count++))
+                    fi
+                  fi
+                done
+                
+                echo "📊 SAP BTP Upload Summary:"
+                echo "✅ Successfully uploaded: $upload_count files"
+                echo "❌ Failed uploads: $failed_upload_count files"
+                
+              else
+                echo "❌ Could not extract access token from SAP BTP response"
+                echo "🔍 Debug: Token response: $sap_token_response_body"
+              fi
+            else
+              echo "❌ Failed to get SAP BTP access token (HTTP $sap_token_http_code)"
+              echo "🔍 Debug: Token response: $sap_token_response_body"
+            fi
+          else
+            echo "⚠️ SAP BTP Document Management not configured"
+            echo "ℹ️ To enable SAP BTP uploads, set these organization variables:"
+            echo "   - DIAGRAMS_SAP_BTP_TOKEN_URL (OAuth2 token endpoint)"
+            echo "   - DIAGRAMS_SAP_BTP_CLIENT_ID (OAuth2 client ID)"
+            echo "   - DIAGRAMS_SAP_BTP_DM_BASE_URL (Document Management API base URL)"
+            echo "   - DIAGRAMS_SAP_BTP_REPOSITORY_ID (Optional: specific repository ID)"
+            echo "   And this secret:"
+            echo "   - DIAGRAMS_SAP_BTP_CLIENT_SECRET (OAuth2 client secret)"
+          fi
+
   notify:
     needs: process
     runs-on: ubuntu-latest
@@ -679,13 +891,43 @@ jobs:
           
           # Get processed diagram name (single diagram per commit)
           diagram_name=""
+          diagram_display_name=""
           if [[ -f "png_files/CHANGELOG.csv" ]]; then
             # Get the most recent diagram from changelog
             diagram_name=$(tail -n 1 png_files/CHANGELOG.csv | cut -d',' -f3 | tr -d '"' 2>/dev/null || echo "")
           fi
           
-          if [[ -z "$diagram_name" || "$diagram_name" == "Diagram" ]]; then
-            diagram_name="Unknown diagram"
+          if [[ -z "$diagram_name" || "$diagram_name" == "Diagram" || "$diagram_name" == "System" ]]; then
+            diagram_display_name="No specific diagram"
+          else
+            # Parse the diagram name to extract readable parts
+            # Expected format: x.y.description (e.g., "1.2.Azure Cloud Architecture")
+            if [[ "$diagram_name" =~ ^([0-9]+)\.([0-9]+)\.(.+)$ ]]; then
+              tech_id="${BASH_REMATCH[1]}"
+              detail_level="${BASH_REMATCH[2]}"
+              description="${BASH_REMATCH[3]}"
+              
+              # Map technology IDs to readable names
+              case "$tech_id" in
+                0) tech_name="Multi-tech" ;;
+                1) tech_name="Cloud" ;;
+                2) tech_name="Network" ;;
+                3) tech_name="SAP" ;;
+                *) tech_name="Tech-$tech_id" ;;
+              esac
+              
+              # Map detail levels to readable names
+              case "$detail_level" in
+                1) detail_name="High-level" ;;
+                2) detail_name="Intermediate" ;;
+                3) detail_name="Detailed" ;;
+                *) detail_name="Level-$detail_level" ;;
+              esac
+              
+              diagram_display_name="📊 $description ($tech_name, $detail_name)"
+            else
+              diagram_display_name="📊 $diagram_name"
+            fi
           fi
           
           echo "🔍 Debug: commit_hash=$commit_hash"
@@ -725,7 +967,7 @@ jobs:
             
             # Escape commit message and diagram name for JSON
             escaped_commit_message=$(echo "$commit_message" | sed 's/"/\\"/g' | sed "s/'/\\'/g")
-            escaped_diagram_name=$(echo "$diagram_name" | sed 's/"/\\"/g')
+            escaped_diagram_display_name=$(echo "$diagram_display_name" | sed 's/"/\\"/g')
             escaped_author_info=$(echo "$author_info" | sed 's/"/\\"/g')
             
             response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X POST "$teams_webhook" \
@@ -743,7 +985,7 @@ jobs:
                     {\"name\": \"👤 Author\", \"value\": \"$escaped_author_info\"},
                     {\"name\": \"📝 Commit\", \"value\": \"$commit_hash\"},
                     {\"name\": \"💬 Message\", \"value\": \"$escaped_commit_message\"},
-                    {\"name\": \"📊 Diagram\", \"value\": \"$escaped_diagram_name\"},
+                    {\"name\": \"📊 Diagram\", \"value\": \"$escaped_diagram_display_name\"},
                     {\"name\": \"✅ Processed\", \"value\": \"$processed\"},
                     {\"name\": \"❌ Failed\", \"value\": \"$failed\"},
                     {\"name\": \"🔄 Run\", \"value\": \"#${{ github.run_number }}\"}
