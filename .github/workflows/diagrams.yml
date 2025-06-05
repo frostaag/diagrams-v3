@@ -44,10 +44,23 @@ jobs:
           mkdir -p png_files
           echo "📁 Directory created/verified: png_files"
           
-          # Force create/verify changelog file with proper header
+          # Force create/verify changelog file with proper header (preserve existing entries)
           echo "📄 Force ensuring changelog file exists with proper header..."
-          echo "Date,Time,Diagram,Action,Version,Commit,Author,CommitMessage" > png_files/CHANGELOG.csv
-          echo "📄 Changelog file created/reset with proper header"
+          if [[ ! -f "png_files/CHANGELOG.csv" ]]; then
+            echo "Date,Time,Diagram,Action,Version,Commit,Author,CommitMessage" > png_files/CHANGELOG.csv
+            echo "📄 Changelog file created with header"
+          else
+            echo "📄 Changelog file already exists, preserving existing entries"
+            # Verify it has the correct header
+            if ! head -n 1 png_files/CHANGELOG.csv | grep -q "Date,Time,Diagram,Action,Version,Commit,Author,CommitMessage"; then
+              echo "📄 Fixing changelog header..."
+              # Create temp file with proper header and existing content
+              echo "Date,Time,Diagram,Action,Version,Commit,Author,CommitMessage" > png_files/CHANGELOG_temp.csv
+              tail -n +2 png_files/CHANGELOG.csv >> png_files/CHANGELOG_temp.csv 2>/dev/null || true
+              mv png_files/CHANGELOG_temp.csv png_files/CHANGELOG.csv
+              echo "📄 Changelog header fixed"
+            fi
+          fi
           
           # Verify the files were actually created
           if [[ -d "png_files" ]]; then
@@ -265,12 +278,26 @@ jobs:
             # CSV format: Date,Time,Diagram,Action,Version,Commit,Author,CommitMessage
             # Version is the 5th field
             if [[ -f "png_files/CHANGELOG.csv" ]]; then
+              # Debug: Show what we're searching for
+              echo "🔍 Debug: Searching for diagram '$diagram_name' in changelog..." >&2
+              echo "🔍 Debug: Changelog entries for this diagram:" >&2
+              grep "^[^,]*,[^,]*,\"${diagram_name}\"," png_files/CHANGELOG.csv >&2 || echo "No entries found" >&2
+              
+              # Extract the last version for this specific diagram
               last_version=$(grep "^[^,]*,[^,]*,\"${diagram_name}\"," png_files/CHANGELOG.csv | tail -1 | cut -d',' -f5 | tr -d '"' 2>/dev/null || echo "")
               echo "🔍 Debug: Last version found for $diagram_name: '$last_version'" >&2
+              
+              # Also try without quotes in case format varies
+              if [[ -z "$last_version" ]]; then
+                last_version=$(grep "^[^,]*,[^,]*,${diagram_name}," png_files/CHANGELOG.csv | tail -1 | cut -d',' -f5 | tr -d '"' 2>/dev/null || echo "")
+                echo "🔍 Debug: Last version found (no quotes) for $diagram_name: '$last_version'" >&2
+              fi
+            else
+              echo "🔍 Debug: No changelog file found" >&2
             fi
             
             # If no previous version found, this is a new file - start at 1.0
-            if [[ -z "$last_version" ]]; then
+            if [[ -z "$last_version" || "$last_version" == "N/A" ]]; then
               echo "🔍 Debug: No previous version found, starting at 1.0" >&2
               echo "1.0"
               return
@@ -849,10 +876,14 @@ jobs:
               else
                 echo "❌ Could not extract access token from SAP BTP response"
                 echo "🔍 Debug: Token response: $sap_token_response_body"
+                echo "sap_status=failed" >> $GITHUB_OUTPUT
+                echo "sap_message=Could not extract access token" >> $GITHUB_OUTPUT
               fi
             else
               echo "❌ Failed to get SAP BTP access token (HTTP $sap_token_http_code)"
               echo "🔍 Debug: Token response: $sap_token_response_body"
+              echo "sap_status=failed" >> $GITHUB_OUTPUT
+              echo "sap_message=Authentication failed (HTTP $sap_token_http_code)" >> $GITHUB_OUTPUT
             fi
           else
             echo "⚠️ SAP BTP Document Management not configured"
@@ -863,6 +894,8 @@ jobs:
             echo "   - DIAGRAMS_SAP_BTP_REPOSITORY_ID (Optional: specific repository ID)"
             echo "   And this secret:"
             echo "   - DIAGRAMS_SAP_BTP_CLIENT_SECRET (OAuth2 client secret)"
+            echo "sap_status=not_configured" >> $GITHUB_OUTPUT
+            echo "sap_message=SAP BTP not configured" >> $GITHUB_OUTPUT
           fi
 
   notify:
