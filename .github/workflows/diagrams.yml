@@ -461,6 +461,7 @@ jobs:
           fi
 
       - name: Upload to SharePoint
+        id: sharepoint_upload
         if: steps.convert.outputs.processed != '0'
         continue-on-error: true
         run: |
@@ -631,6 +632,7 @@ jobs:
           fi
 
       - name: Upload PNG files to SAP BTP Document Management
+        id: sap_upload
         if: steps.convert.outputs.processed != '0'
         continue-on-error: true
         run: |
@@ -651,7 +653,15 @@ jobs:
             echo "📤 Getting SAP BTP access token..."
             echo "🔍 Debug: Token URL: $(echo "$sap_token_url" | sed 's/\(.*\)\/oauth\/token.*/\1\/oauth\/token/')"
             echo "🔍 Debug: Client ID: $(echo "$sap_client_id" | head -c 10)..."
-            echo "🔍 Debug: Client Secret configured: $(if [[ -n "${{ secrets.DIAGRAMS_SAP_BTP_CLIENT_SECRET }}" ]]; then echo "Yes (${#{{ secrets.DIAGRAMS_SAP_BTP_CLIENT_SECRET }}} chars)"; else echo "No"; fi)"
+            
+            # Check client secret safely
+            sap_client_secret="${{ secrets.DIAGRAMS_SAP_BTP_CLIENT_SECRET }}"
+            if [[ -n "$sap_client_secret" ]]; then
+              echo "🔍 Debug: Client Secret configured: Yes (${#sap_client_secret} chars)"
+            else
+              echo "🔍 Debug: Client Secret configured: No"
+            fi
+            
             echo "🔍 Debug: DM Base URL: $sap_dm_base_url"
             
             # Get access token for SAP BTP Document Management
@@ -826,6 +836,15 @@ jobs:
                 echo "📊 SAP BTP Upload Summary:"
                 echo "✅ Successfully uploaded: $upload_count files"
                 echo "❌ Failed uploads: $failed_upload_count files"
+                
+                # Set output for Teams notification
+                if [[ $upload_count -gt 0 ]]; then
+                  echo "sap_status=success" >> $GITHUB_OUTPUT
+                  echo "sap_message=Uploaded $upload_count files to SAP BTP" >> $GITHUB_OUTPUT
+                else
+                  echo "sap_status=failed" >> $GITHUB_OUTPUT
+                  echo "sap_message=Failed to upload files to SAP BTP" >> $GITHUB_OUTPUT
+                fi
                 
               else
                 echo "❌ Could not extract access token from SAP BTP response"
