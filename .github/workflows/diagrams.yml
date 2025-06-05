@@ -178,12 +178,12 @@ jobs:
             # Additional check: only process files that actually exist
             if [[ -n "$changed_files" ]]; then
               existing_files=""
-              for file in $changed_files; do
+              while IFS= read -r file; do
                 if [[ -f "$file" ]]; then
-                  existing_files="$existing_files $file"
+                  existing_files="$existing_files"$'\n'"$file"
                 fi
-              done
-              changed_files=$(echo "$existing_files" | xargs -n1 2>/dev/null | sort -u | tr '\n' ' ' | sed 's/^ *//;s/ *$//')
+              done <<< "$changed_files"
+              changed_files=$(echo "$existing_files" | grep -v '^$' | sort -u | tr '\n' ' ' | sed 's/^ *//;s/ *$//')
               echo "🔍 Debug: Filtered to existing files: '$changed_files'"
             fi
           fi
