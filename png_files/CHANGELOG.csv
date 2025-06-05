@@ -1,4 +1,5 @@
 Date,Time,Diagram,Action,Version,Commit,Author,CommitMessage
+<<<<<<< HEAD
 05.06.2025,10:34:49,"1","Converted to PNG","1.0","4b7af9f","Lucas Dreger","Update 1.drawio"
 05.06.2025,10:49:10,"1","Converted to PNG","1.1","58bd34d","Lucas Dreger","Update 1.drawio"
 05.06.2025,10:57:36,"System","No Diagrams Changed","N/A","7af3f39","Lucas Dreger","Update 4.1.BTP and SAP Cloud.drawio"
@@ -8,3 +9,5 @@ Date,Time,Diagram,Action,Version,Commit,Author,CommitMessage
 05.06.2025,12:07:59,"1","Converted to PNG","1.4","eba5f1b","Lucas Dreger","Update 1.drawio"
 05.06.2025,13:14:36,"1","Converted to PNG","1.5","515e0b2","Lucas Dreger","Update 1.drawio"
 05.06.2025,13:47:36,"1","Converted to PNG","1.6","469f40d","Lucas Dreger","Update 1.drawio"
+=======
+>>>>>>> 0816556 (Remove obsolete PNG file, update CHANGELOG to reflect recent changes, and add a new script for verifying SAP BTP Document Management Service credentials.)
