@@ -710,15 +710,71 @@ jobs:
             echo "🔍 Debug: Client Secret first 5 chars: $(echo "$sap_client_secret" | head -c 5)..."
             echo "🔍 Debug: Client Secret last 5 chars: ...$(echo "$sap_client_secret" | tail -c 5)"
             
-            # Enhanced curl request with more debugging
+            # Enhanced curl request with proper URL encoding
+            echo "🔍 Debug: Testing different authentication methods..."
+            
+            # Method 1: Using form data with proper URL encoding
             sap_token_response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X POST "$sap_token_url" \
               -H "Content-Type: application/x-www-form-urlencoded" \
               -H "Accept: application/json" \
-              -d "grant_type=client_credentials" \
-              -d "client_id=$sap_client_id" \
-              -d "client_secret=$sap_client_secret" \
+              --data-urlencode "grant_type=client_credentials" \
+              --data-urlencode "client_id=$sap_client_id" \
+              --data-urlencode "client_secret=$sap_client_secret" \
               --max-time 30 \
-              -v 2>&1 | grep -v "client_secret" || echo "CURL_FAILED")
+              2>/dev/null || echo "CURL_FAILED")
+            
+            echo "🔍 Debug: Method 1 (URL encoded) result:"
+            sap_token_http_code=$(echo "$sap_token_response" | grep -o "HTTPSTATUS:[0-9]*" | cut -d: -f2)
+            sap_token_response_body=$(echo "$sap_token_response" | sed -E 's/HTTPSTATUS:[0-9]*$//')
+            echo "🔍 Debug: HTTP Status: $sap_token_http_code"
+            
+            # If Method 1 fails, try Method 2: Basic Auth
+            if [[ "$sap_token_http_code" -ne 200 ]]; then
+              echo "🔍 Debug: Method 1 failed, trying Basic Auth..."
+              
+              # Create base64 encoded credentials for Basic Auth
+              basic_auth=$(echo -n "${sap_client_id}:${sap_client_secret}" | base64 -w 0)
+              
+              sap_token_response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X POST "$sap_token_url" \
+                -H "Content-Type: application/x-www-form-urlencoded" \
+                -H "Accept: application/json" \
+                -H "Authorization: Basic $basic_auth" \
+                -d "grant_type=client_credentials" \
+                --max-time 30 \
+                2>/dev/null || echo "CURL_FAILED")
+              
+              echo "🔍 Debug: Method 2 (Basic Auth) result:"
+              sap_token_http_code=$(echo "$sap_token_response" | grep -o "HTTPSTATUS:[0-9]*" | cut -d: -f2)
+              sap_token_response_body=$(echo "$sap_token_response" | sed -E 's/HTTPSTATUS:[0-9]*$//')
+              echo "🔍 Debug: HTTP Status: $sap_token_http_code"
+            fi
+            
+            # If Method 2 fails, try Method 3: Manual form encoding
+            if [[ "$sap_token_http_code" -ne 200 ]]; then
+              echo "🔍 Debug: Method 2 failed, trying manual form encoding..."
+              
+              # Manually URL encode special characters
+              encoded_client_id=$(echo -n "$sap_client_id" | sed 's/!/%21/g' | sed 's/|/%7C/g')
+              encoded_client_secret=$(echo -n "$sap_client_secret" | sed 's/=/%3D/g' | sed 's/+/%2B/g' | sed 's!/!%2F!g')
+              
+              echo "🔍 Debug: Original Client ID: ${sap_client_id:0:30}..."
+              echo "🔍 Debug: Encoded Client ID: ${encoded_client_id:0:30}..."
+              
+              sap_token_response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X POST "$sap_token_url" \
+                -H "Content-Type: application/x-www-form-urlencoded" \
+                -H "Accept: application/json" \
+                -d "grant_type=client_credentials&client_id=${encoded_client_id}&client_secret=${encoded_client_secret}" \
+                --max-time 30 \
+                2>/dev/null || echo "CURL_FAILED")
+              
+              echo "🔍 Debug: Method 3 (Manual encoding) result:"
+              sap_token_http_code=$(echo "$sap_token_response" | grep -o "HTTPSTATUS:[0-9]*" | cut -d: -f2)
+              sap_token_response_body=$(echo "$sap_token_response" | sed -E 's/HTTPSTATUS:[0-9]*$//')
+              echo "🔍 Debug: HTTP Status: $sap_token_http_code"
+            fi
+            
+            echo "🔍 Debug: Final SAP BTP token HTTP Status: $sap_token_http_code"
+            echo "🔍 Debug: Response body (truncated): $(echo "$sap_token_response_body" | head -c 200)..."
             
             sap_token_http_code=$(echo "$sap_token_response" | grep -o "HTTPSTATUS:[0-9]*" | cut -d: -f2)
             sap_token_response_body=$(echo "$sap_token_response" | sed -E 's/HTTPSTATUS:[0-9]*$//')
