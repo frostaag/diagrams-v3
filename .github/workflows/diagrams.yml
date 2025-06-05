@@ -692,16 +692,27 @@ jobs:
             echo "🔍 Debug: DM Base URL: $sap_dm_base_url"
             
             # Get access token for SAP BTP Document Management
+            echo "🔍 Debug: About to make OAuth request..."
+            echo "🔍 Debug: Client ID first 20 chars: $(echo "$sap_client_id" | head -c 20)..."
+            echo "🔍 Debug: Client ID last 10 chars: ...$(echo "$sap_client_id" | tail -c 10)"
+            echo "🔍 Debug: Client Secret first 5 chars: $(echo "$sap_client_secret" | head -c 5)..."
+            echo "🔍 Debug: Client Secret last 5 chars: ...$(echo "$sap_client_secret" | tail -c 5)"
+            
+            # Enhanced curl request with more debugging
             sap_token_response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X POST "$sap_token_url" \
               -H "Content-Type: application/x-www-form-urlencoded" \
+              -H "Accept: application/json" \
               -d "grant_type=client_credentials" \
               -d "client_id=$sap_client_id" \
-              -d "client_secret=${{ secrets.DIAGRAMS_SAP_BTP_CLIENT_SECRET }}")
+              -d "client_secret=$sap_client_secret" \
+              --max-time 30 \
+              -v 2>&1 | grep -v "client_secret" || echo "CURL_FAILED")
             
             sap_token_http_code=$(echo "$sap_token_response" | grep -o "HTTPSTATUS:[0-9]*" | cut -d: -f2)
             sap_token_response_body=$(echo "$sap_token_response" | sed -E 's/HTTPSTATUS:[0-9]*$//')
             
             echo "🔍 Debug: SAP BTP token HTTP Status: $sap_token_http_code"
+            echo "🔍 Debug: Full curl response (sanitized): $sap_token_response_body"
             
             if [[ "$sap_token_http_code" -eq 200 ]]; then
               sap_access_token=$(echo "$sap_token_response_body" | jq -r '.access_token' 2>/dev/null || echo "")
@@ -882,6 +893,48 @@ jobs:
             else
               echo "❌ Failed to get SAP BTP access token (HTTP $sap_token_http_code)"
               echo "🔍 Debug: Token response: $sap_token_response_body"
+              
+              # Provide specific troubleshooting advice based on error
+              if [[ "$sap_token_http_code" -eq 401 ]]; then
+                echo ""
+                echo "🔧 SAP BTP Authentication Troubleshooting (HTTP 401):"
+                echo "   This indicates invalid credentials. Please verify:"
+                echo "   1. Client ID is correct (starts with 'sb-' and ends with service instance GUID)"
+                echo "   2. Client Secret is the correct value from service key"
+                echo "   3. Token URL matches your subaccount's authentication domain"
+                echo ""
+                echo "📋 Current Configuration Check:"
+                echo "   • Token URL: $sap_token_url"
+                echo "   • Client ID format: $(echo "$sap_client_id" | grep -E '^sb-[a-f0-9-]+!\w+\|\w+!\w+$' && echo "✅ Valid format" || echo "❌ Invalid format")"
+                echo "   • Client ID length: ${#sap_client_id} chars (should be ~80-120)"
+                echo "   • Client Secret length: ${#sap_client_secret} chars (should be ~40-50)"
+                echo ""
+                echo "🔍 Expected formats:"
+                echo "   • Client ID: sb-[uuid]![service]|[plan]![instance]"
+                echo "   • Example: sb-a89eef4d-1cc2-4171-a69a-19fd2b4dbaa9!b523612|sdm-di-SDM_DI_PROD-prod!b41064"
+                echo ""
+                echo "💡 To get correct values:"
+                echo "   1. Go to SAP BTP Cockpit → Your Subaccount"
+                echo "   2. Services → Instances and Subscriptions"
+                echo "   3. Find your Document Management instance"
+                echo "   4. Create/View Service Key"
+                echo "   5. Use 'clientid' and 'clientsecret' from the service key"
+              elif [[ "$sap_token_http_code" -eq 400 ]]; then
+                echo ""
+                echo "🔧 SAP BTP Request Format Error (HTTP 400):"
+                echo "   Check that the OAuth request format is correct"
+                echo "   Verify grant_type=client_credentials is supported"
+              elif [[ "$sap_token_http_code" -eq 404 ]]; then
+                echo ""
+                echo "🔧 SAP BTP Endpoint Not Found (HTTP 404):"
+                echo "   Token URL appears to be incorrect"
+                echo "   Expected format: https://[subdomain].authentication.[region].hana.ondemand.com/oauth/token"
+              else
+                echo ""
+                echo "🔧 SAP BTP Unexpected Error (HTTP $sap_token_http_code):"
+                echo "   Check network connectivity and SAP BTP service status"
+              fi
+              
               echo "sap_status=failed" >> $GITHUB_OUTPUT
               echo "sap_message=Authentication failed (HTTP $sap_token_http_code)" >> $GITHUB_OUTPUT
             fi
