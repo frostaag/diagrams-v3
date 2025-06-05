@@ -489,9 +489,15 @@ jobs:
 
       - name: Upload to SharePoint
         id: sharepoint_upload
-        if: always() && steps.convert.result == 'success'
+        if: always()
         continue-on-error: true
         run: |
+          echo "🔍 Debug: SharePoint upload step starting..."
+          echo "🔍 Debug: Convert step result: ${{ steps.convert.result }}"
+          echo "🔍 Debug: Convert step conclusion: ${{ steps.convert.conclusion }}"
+          echo "🔍 Debug: Convert step outcome: ${{ steps.convert.outcome }}"
+          echo "🔍 Debug: Processed count: ${{ steps.convert.outputs.processed }}"
+          
           # Get access token
           ACCESS_TOKEN=$(curl -s -X POST \
             "https://login.microsoftonline.com/${{ vars.DIAGRAMS_SHAREPOINT_TENANT_ID }}/oauth2/v2.0/token" \
@@ -660,9 +666,15 @@ jobs:
 
       - name: Upload PNG files to SAP BTP Document Management
         id: sap_upload
-        if: always() && steps.convert.result == 'success'
+        if: always()
         continue-on-error: true
         run: |
+          echo "🔍 Debug: SAP BTP upload step starting..."
+          echo "🔍 Debug: Convert step result: ${{ steps.convert.result }}"
+          echo "🔍 Debug: Convert step conclusion: ${{ steps.convert.conclusion }}"
+          echo "🔍 Debug: Convert step outcome: ${{ steps.convert.outcome }}"
+          echo "🔍 Debug: Processed count: ${{ steps.convert.outputs.processed }}"
+          
           echo "🔍 Starting SAP BTP Document Management upload..."
           
           # Check if SAP BTP variables are configured
