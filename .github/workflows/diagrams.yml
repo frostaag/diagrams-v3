@@ -469,6 +469,10 @@ jobs:
                 git commit -m "Create PNG files directory and changelog [skip ci]"
                 echo "✅ Committed successfully"
                 
+                echo "🔍 Debug: Pulling latest changes before push..."
+                git pull --rebase origin main || git pull origin main
+                echo "✅ Pulled latest changes"
+                
                 echo "🔍 Debug: Pushing to remote..."
                 git push
                 echo "✅ Pushed successfully"
@@ -485,6 +489,10 @@ jobs:
             
             git commit -m "Generate PNG files and update changelog [skip ci]"
             echo "✅ Committed successfully"
+            
+            echo "🔍 Debug: Pulling latest changes before push..."
+            git pull --rebase origin main || git pull origin main
+            echo "✅ Pulled latest changes"
             
             echo "🔍 Debug: Pushing to remote..."
             git push
