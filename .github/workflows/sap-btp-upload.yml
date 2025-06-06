@@ -1,0 +1,570 @@
+name: SAP BTP Document Management Upload
+
+on:
+  workflow_dispatch:
+    inputs:
+      upload_all:
+        description: 'Upload all PNG files (true) or only recent ones (false)'
+        required: false
+        default: false
+        type: boolean
+  schedule:
+    # Run daily at 9 AM UTC to upload any new PNG files
+    - cron: '0 9 * * *'
+  push:
+    paths:
+      - 'png_files/**/*.png'
+
+permissions:
+  contents: read
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    outputs:
+      upload_status: ${{ steps.sap_upload.outputs.upload_status }}
+      upload_count: ${{ steps.sap_upload.outputs.upload_count }}
+      failed_count: ${{ steps.sap_upload.outputs.failed_count }}
+      upload_message: ${{ steps.sap_upload.outputs.upload_message }}
+      
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Upload PNG files to SAP BTP Document Management
+        id: sap_upload
+        run: |
+          echo "🚀 SAP BTP Document Management Upload Workflow"
+          echo "=============================================="
+          
+          # Check if png_files directory exists
+          if [[ ! -d "png_files" ]]; then
+            echo "❌ No png_files directory found"
+            echo "upload_status=no_files" >> $GITHUB_OUTPUT
+            echo "upload_count=0" >> $GITHUB_OUTPUT
+            echo "failed_count=0" >> $GITHUB_OUTPUT
+            echo "upload_message=No png_files directory found" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # Count PNG files
+          png_count=$(ls png_files/*.png 2>/dev/null | wc -l || echo 0)
+          echo "📊 Found $png_count PNG files in png_files directory"
+          
+          if [[ $png_count -eq 0 ]]; then
+            echo "❌ No PNG files found to upload"
+            echo "upload_status=no_files" >> $GITHUB_OUTPUT
+            echo "upload_count=0" >> $GITHUB_OUTPUT
+            echo "failed_count=0" >> $GITHUB_OUTPUT
+            echo "upload_message=No PNG files found to upload" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # Check if SAP BTP variables are configured
+          sap_token_url="${{ vars.DIAGRAMS_SAP_BTP_TOKEN_URL }}"
+          sap_client_id="${{ vars.DIAGRAMS_SAP_BTP_CLIENT_ID }}"
+          sap_dm_base_url="${{ vars.DIAGRAMS_SAP_BTP_DM_BASE_URL }}"
+          sap_repository_id="${{ vars.DIAGRAMS_SAP_BTP_REPOSITORY_ID }}"
+          sap_client_secret="${{ secrets.DIAGRAMS_SAP_BTP_CLIENT_SECRET }}"
+          
+          echo "🔍 Configuration Check:"
+          echo "  SAP BTP Token URL: $(if [[ -n "$sap_token_url" ]]; then echo "✅ Configured"; else echo "❌ Missing"; fi)"
+          echo "  SAP BTP Client ID: $(if [[ -n "$sap_client_id" ]]; then echo "✅ Configured (${#sap_client_id} chars)"; else echo "❌ Missing"; fi)"
+          echo "  SAP BTP DM Base URL: $(if [[ -n "$sap_dm_base_url" ]]; then echo "✅ Configured"; else echo "❌ Missing"; fi)"
+          echo "  SAP BTP Repository ID: $(if [[ -n "$sap_repository_id" ]]; then echo "✅ Configured"; else echo "❌ Missing"; fi)"
+          echo "  SAP BTP Client Secret: $(if [[ -n "$sap_client_secret" ]]; then echo "✅ Configured (${#sap_client_secret} chars)"; else echo "❌ Missing"; fi)"
+          
+          if [[ -z "$sap_token_url" || -z "$sap_client_id" || -z "$sap_dm_base_url" || -z "$sap_client_secret" ]]; then
+            echo "❌ SAP BTP configuration incomplete"
+            echo "upload_status=not_configured" >> $GITHUB_OUTPUT
+            echo "upload_count=0" >> $GITHUB_OUTPUT
+            echo "failed_count=0" >> $GITHUB_OUTPUT
+            echo "upload_message=SAP BTP variables not configured" >> $GITHUB_OUTPUT
+            
+            echo ""
+            echo "🔧 Required Configuration:"
+            echo "  Organization Variables:"
+            echo "    - DIAGRAMS_SAP_BTP_TOKEN_URL"
+            echo "    - DIAGRAMS_SAP_BTP_CLIENT_ID" 
+            echo "    - DIAGRAMS_SAP_BTP_DM_BASE_URL"
+            echo "    - DIAGRAMS_SAP_BTP_REPOSITORY_ID (optional but recommended)"
+            echo "  Organization Secret:"
+            echo "    - DIAGRAMS_SAP_BTP_CLIENT_SECRET"
+            exit 0
+          fi
+          
+          echo "📤 Getting SAP BTP access token..."
+          echo "🔍 Token URL: $sap_token_url"
+          echo "🔍 Client ID: $(echo "$sap_client_id" | head -c 20)...$(echo "$sap_client_id" | tail -c 10)"
+          echo "🔍 DM Base URL: $sap_dm_base_url"
+          
+          # Get access token using multiple methods
+          echo "🔐 Testing OAuth2 authentication methods..."
+          
+          # Method 1: Standard URL-encoded form data
+          echo "📋 Method 1: URL-encoded form data"
+          sap_token_response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X POST "$sap_token_url" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -H "Accept: application/json" \
+            --data-urlencode "grant_type=client_credentials" \
+            --data-urlencode "client_id=$sap_client_id" \
+            --data-urlencode "client_secret=$sap_client_secret" \
+            --max-time 30 \
+            2>/dev/null || echo "CURL_FAILED")
+          
+          sap_token_http_code=$(echo "$sap_token_response" | grep -o "HTTPSTATUS:[0-9]*" | cut -d: -f2)
+          sap_token_response_body=$(echo "$sap_token_response" | sed -E 's/HTTPSTATUS:[0-9]*$//')
+          
+          echo "  HTTP Status: $sap_token_http_code"
+          
+          # Method 2: Basic Authentication (if Method 1 fails)
+          if [[ "$sap_token_http_code" -ne 200 ]]; then
+            echo "📋 Method 2: Basic Authentication"
+            
+            basic_auth=$(echo -n "${sap_client_id}:${sap_client_secret}" | base64 -w 0 2>/dev/null || echo -n "${sap_client_id}:${sap_client_secret}" | base64)
+            
+            sap_token_response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X POST "$sap_token_url" \
+              -H "Content-Type: application/x-www-form-urlencoded" \
+              -H "Accept: application/json" \
+              -H "Authorization: Basic $basic_auth" \
+              -d "grant_type=client_credentials" \
+              --max-time 30 \
+              2>/dev/null || echo "CURL_FAILED")
+            
+            sap_token_http_code=$(echo "$sap_token_response" | grep -o "HTTPSTATUS:[0-9]*" | cut -d: -f2)
+            sap_token_response_body=$(echo "$sap_token_response" | sed -E 's/HTTPSTATUS:[0-9]*$//')
+            
+            echo "  HTTP Status: $sap_token_http_code"
+          fi
+          
+          # Method 3: Manual encoding (if Method 2 fails)
+          if [[ "$sap_token_http_code" -ne 200 ]]; then
+            echo "📋 Method 3: Manual URL encoding"
+            
+            encoded_client_id=$(echo -n "$sap_client_id" | sed 's/!/%21/g' | sed 's/|/%7C/g')
+            encoded_client_secret=$(echo -n "$sap_client_secret" | sed 's/=/%3D/g' | sed 's/+/%2B/g' | sed 's!/!%2F!g')
+            
+            sap_token_response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X POST "$sap_token_url" \
+              -H "Content-Type: application/x-www-form-urlencoded" \
+              -H "Accept: application/json" \
+              -d "grant_type=client_credentials&client_id=${encoded_client_id}&client_secret=${encoded_client_secret}" \
+              --max-time 30 \
+              2>/dev/null || echo "CURL_FAILED")
+            
+            sap_token_http_code=$(echo "$sap_token_response" | grep -o "HTTPSTATUS:[0-9]*" | cut -d: -f2)
+            sap_token_response_body=$(echo "$sap_token_response" | sed -E 's/HTTPSTATUS:[0-9]*$//')
+            
+            echo "  HTTP Status: $sap_token_http_code"
+          fi
+          
+          if [[ "$sap_token_http_code" -eq 200 ]]; then
+            sap_access_token=$(echo "$sap_token_response_body" | jq -r '.access_token' 2>/dev/null || echo "")
+            
+            if [[ -n "$sap_access_token" && "$sap_access_token" != "null" ]]; then
+              echo "✅ SAP BTP access token obtained successfully"
+              echo "🔍 Token length: ${#sap_access_token} characters"
+              
+              # Determine API root path based on repository ID configuration
+              if [[ -n "$sap_repository_id" ]]; then
+                echo "🔍 Using repository-specific API path: /browser/$sap_repository_id/root"
+                sap_root_path="/browser/${sap_repository_id}/root"
+              else
+                echo "🔍 Using generic API path: /browser/objects/root"
+                sap_root_path="/browser/objects/root"
+              fi
+              
+              # Ensure Diagrams folder exists
+              diagrams_folder_id=""
+              
+              echo "📁 Ensuring Diagrams folder exists..."
+              folders_response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X GET \
+                "${sap_dm_base_url}${sap_root_path}/children?filter=objectType%20eq%20'folder'%20and%20name%20eq%20'Diagrams'" \
+                -H "Authorization: Bearer $sap_access_token" \
+                -H "Accept: application/json")
+              
+              folders_http_code=$(echo "$folders_response" | grep -o "HTTPSTATUS:[0-9]*" | cut -d: -f2)
+              folders_response_body=$(echo "$folders_response" | sed -E 's/HTTPSTATUS:[0-9]*$//')
+              
+              echo "📂 Folder search HTTP Status: $folders_http_code"
+              
+              if [[ "$folders_http_code" -eq 200 ]]; then
+                folder_count=$(echo "$folders_response_body" | jq -r '.objects | length' 2>/dev/null || echo "0")
+                
+                if [[ "$folder_count" -gt 0 ]]; then
+                  diagrams_folder_id=$(echo "$folders_response_body" | jq -r '.objects[0].id' 2>/dev/null || echo "")
+                  echo "✅ Found existing Diagrams folder: $diagrams_folder_id"
+                fi
+              fi
+              
+              # Create Diagrams folder if it doesn't exist
+              if [[ -z "$diagrams_folder_id" || "$diagrams_folder_id" == "null" ]]; then
+                echo "📁 Creating Diagrams folder..."
+                
+                create_folder_response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X POST \
+                  "${sap_dm_base_url}${sap_root_path}/children" \
+                  -H "Authorization: Bearer $sap_access_token" \
+                  -H "Content-Type: application/json" \
+                  -H "Accept: application/json" \
+                  -d '{
+                    "name": "Diagrams",
+                    "description": "Automatically uploaded diagram files from GitHub workflow",
+                    "objectType": "folder"
+                  }')
+                
+                create_folder_http_code=$(echo "$create_folder_response" | grep -o "HTTPSTATUS:[0-9]*" | cut -d: -f2)
+                create_folder_response_body=$(echo "$create_folder_response" | sed -E 's/HTTPSTATUS:[0-9]*$//')
+                
+                echo "📁 Create folder HTTP Status: $create_folder_http_code"
+                
+                if [[ "$create_folder_http_code" -eq 201 ]]; then
+                  diagrams_folder_id=$(echo "$create_folder_response_body" | jq -r '.id' 2>/dev/null || echo "")
+                  echo "✅ Successfully created Diagrams folder: $diagrams_folder_id"
+                elif [[ "$create_folder_http_code" -eq 409 ]]; then
+                  echo "📁 Diagrams folder already exists (conflict), searching again..."
+                  # Try to find it again
+                  retry_folders_response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X GET \
+                    "${sap_dm_base_url}${sap_root_path}/children?filter=objectType%20eq%20'folder'%20and%20name%20eq%20'Diagrams'" \
+                    -H "Authorization: Bearer $sap_access_token" \
+                    -H "Accept: application/json")
+                  
+                  retry_folders_http_code=$(echo "$retry_folders_response" | grep -o "HTTPSTATUS:[0-9]*" | cut -d: -f2)
+                  retry_folders_response_body=$(echo "$retry_folders_response" | sed -E 's/HTTPSTATUS:[0-9]*$//')
+                  
+                  if [[ "$retry_folders_http_code" -eq 200 ]]; then
+                    retry_folder_count=$(echo "$retry_folders_response_body" | jq -r '.objects | length' 2>/dev/null || echo "0")
+                    if [[ "$retry_folder_count" -gt 0 ]]; then
+                      diagrams_folder_id=$(echo "$retry_folders_response_body" | jq -r '.objects[0].id' 2>/dev/null || echo "")
+                      echo "✅ Found Diagrams folder after conflict: $diagrams_folder_id"
+                    fi
+                  fi
+                else
+                  echo "❌ Failed to create Diagrams folder (HTTP $create_folder_http_code)"
+                  echo "Response: $create_folder_response_body"
+                fi
+              fi
+              
+              # Set fallback upload location if folder creation failed
+              if [[ -z "$diagrams_folder_id" || "$diagrams_folder_id" == "null" ]]; then
+                echo "⚠️ Using root as fallback upload location"
+                if [[ -n "$sap_repository_id" ]]; then
+                  diagrams_folder_id="${sap_repository_id}/root"
+                else
+                  diagrams_folder_id="root"
+                fi
+              fi
+              
+              # Upload PNG files
+              upload_count=0
+              failed_upload_count=0
+              
+              echo ""
+              echo "📤 Starting file uploads..."
+              
+              # Determine which files to upload
+              if [[ "${{ inputs.upload_all }}" == "true" ]]; then
+                echo "📋 Upload mode: All PNG files"
+                files_to_upload=$(ls png_files/*.png 2>/dev/null || echo "")
+              else
+                echo "📋 Upload mode: Recent files only"
+                # Upload files modified in the last 24 hours or if triggered by push
+                if [[ "${{ github.event_name }}" == "push" ]]; then
+                  # Get files that were changed in this push
+                  files_to_upload=$(git diff --name-only HEAD~1 HEAD -- "png_files/*.png" 2>/dev/null || ls png_files/*.png 2>/dev/null || echo "")
+                else
+                  # Get files modified in the last 24 hours
+                  files_to_upload=$(find png_files -name "*.png" -mtime -1 2>/dev/null || echo "")
+                fi
+              fi
+              
+              if [[ -z "$files_to_upload" ]]; then
+                echo "ℹ️ No files selected for upload based on current criteria"
+                echo "upload_status=no_recent_files" >> $GITHUB_OUTPUT
+                echo "upload_count=0" >> $GITHUB_OUTPUT
+                echo "failed_count=0" >> $GITHUB_OUTPUT
+                echo "upload_message=No recent files to upload" >> $GITHUB_OUTPUT
+                exit 0
+              fi
+              
+              echo "📁 Files selected for upload:"
+              echo "$files_to_upload"
+              
+              for png_file in $files_to_upload; do
+                if [[ -f "$png_file" ]]; then
+                  filename=$(basename "$png_file")
+                  file_size=$(stat -c%s "$png_file" 2>/dev/null || stat -f%z "$png_file" 2>/dev/null || echo "0")
+                  
+                  echo ""
+                  echo "📤 Uploading: $filename (${file_size} bytes)"
+                  
+                  # Construct upload URL based on folder type
+                  if [[ "$diagrams_folder_id" == *"/root" ]]; then
+                    upload_url="${sap_dm_base_url}/browser/${diagrams_folder_id}/children"
+                  else
+                    upload_url="${sap_dm_base_url}/browser/objects/${diagrams_folder_id}/children"
+                  fi
+                  
+                  # Create document object
+                  create_doc_response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X POST \
+                    "$upload_url" \
+                    -H "Authorization: Bearer $sap_access_token" \
+                    -H "Content-Type: application/json" \
+                    -H "Accept: application/json" \
+                    -d "{
+                      \"name\": \"$filename\",
+                      \"description\": \"Automatically uploaded diagram from GitHub workflow\",
+                      \"objectType\": \"document\",
+                      \"contentType\": \"image/png\"
+                    }")
+                  
+                  create_doc_http_code=$(echo "$create_doc_response" | grep -o "HTTPSTATUS:[0-9]*" | cut -d: -f2)
+                  create_doc_response_body=$(echo "$create_doc_response" | sed -E 's/HTTPSTATUS:[0-9]*$//')
+                  
+                  if [[ "$create_doc_http_code" -eq 201 ]]; then
+                    document_id=$(echo "$create_doc_response_body" | jq -r '.id' 2>/dev/null || echo "")
+                    
+                    if [[ -n "$document_id" && "$document_id" != "null" ]]; then
+                      # Upload file content
+                      upload_response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X PUT \
+                        "${sap_dm_base_url}/browser/objects/${document_id}/content" \
+                        -H "Authorization: Bearer $sap_access_token" \
+                        -H "Content-Type: image/png" \
+                        --data-binary @"$png_file")
+                      
+                      upload_http_code=$(echo "$upload_response" | grep -o "HTTPSTATUS:[0-9]*" | cut -d: -f2)
+                      
+                      if [[ "$upload_http_code" -eq 200 || "$upload_http_code" -eq 201 ]]; then
+                        echo "  ✅ Successfully uploaded $filename"
+                        ((upload_count++))
+                      else
+                        echo "  ❌ Failed to upload file content for $filename (HTTP $upload_http_code)"
+                        ((failed_upload_count++))
+                      fi
+                    else
+                      echo "  ❌ Could not extract document ID for $filename"
+                      ((failed_upload_count++))
+                    fi
+                  else
+                    echo "  ❌ Failed to create document object for $filename (HTTP $create_doc_http_code)"
+                    echo "  Response: $create_doc_response_body"
+                    ((failed_upload_count++))
+                  fi
+                fi
+              done
+              
+              echo ""
+              echo "📊 Upload Summary:"
+              echo "✅ Successfully uploaded: $upload_count files"
+              echo "❌ Failed uploads: $failed_upload_count files"
+              
+              # Set output variables
+              if [[ $upload_count -gt 0 && $failed_upload_count -eq 0 ]]; then
+                echo "upload_status=success" >> $GITHUB_OUTPUT
+                echo "upload_message=Successfully uploaded $upload_count files" >> $GITHUB_OUTPUT
+              elif [[ $upload_count -gt 0 && $failed_upload_count -gt 0 ]]; then
+                echo "upload_status=partial" >> $GITHUB_OUTPUT
+                echo "upload_message=Uploaded $upload_count files, $failed_upload_count failed" >> $GITHUB_OUTPUT
+              else
+                echo "upload_status=failed" >> $GITHUB_OUTPUT
+                echo "upload_message=Failed to upload any files" >> $GITHUB_OUTPUT
+              fi
+              
+              echo "upload_count=$upload_count" >> $GITHUB_OUTPUT
+              echo "failed_count=$failed_upload_count" >> $GITHUB_OUTPUT
+              
+            else
+              echo "❌ Could not extract access token from response"
+              echo "Response: $sap_token_response_body"
+              echo "upload_status=auth_failed" >> $GITHUB_OUTPUT
+              echo "upload_count=0" >> $GITHUB_OUTPUT
+              echo "failed_count=0" >> $GITHUB_OUTPUT
+              echo "upload_message=Could not extract access token" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "❌ Failed to get SAP BTP access token (HTTP $sap_token_http_code)"
+            echo "Response: $sap_token_response_body"
+            
+            # Provide troubleshooting guidance
+            case "$sap_token_http_code" in
+              401)
+                echo ""
+                echo "🔧 Authentication Error (HTTP 401):"
+                echo "   • Verify Client ID and Client Secret are correct"
+                echo "   • Check if credentials match your service key exactly"
+                echo "   • Ensure no extra spaces or characters in GitHub variables"
+                ;;
+              400)
+                echo ""
+                echo "🔧 Bad Request (HTTP 400):"
+                echo "   • Check OAuth2 request format"
+                echo "   • Verify grant_type=client_credentials is supported"
+                ;;
+              404)
+                echo ""
+                echo "🔧 Not Found (HTTP 404):"
+                echo "   • Verify Token URL is correct"
+                echo "   • Check if SAP BTP service is accessible"
+                ;;
+            esac
+            
+            echo "upload_status=auth_failed" >> $GITHUB_OUTPUT
+            echo "upload_count=0" >> $GITHUB_OUTPUT
+            echo "failed_count=0" >> $GITHUB_OUTPUT
+            echo "upload_message=Authentication failed (HTTP $sap_token_http_code)" >> $GITHUB_OUTPUT
+          fi
+
+  notify:
+    needs: upload
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+      - name: Checkout for Teams Notification
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          
+      - name: Send Teams Notification
+        continue-on-error: true
+        run: |
+          echo "🔔 Preparing SAP BTP Upload Teams notification..."
+          
+          upload_status="${{ needs.upload.outputs.upload_status }}"
+          upload_count="${{ needs.upload.outputs.upload_count }}"
+          failed_count="${{ needs.upload.outputs.failed_count }}"
+          upload_message="${{ needs.upload.outputs.upload_message }}"
+          
+          # Determine status and color
+          case "$upload_status" in
+            "success")
+              status="✅ Success"
+              color="28a745"
+              ;;
+            "partial")
+              status="⚠️ Partial Success"
+              color="ffc107"
+              ;;
+            "failed"|"auth_failed")
+              status="❌ Failed"
+              color="dc3545"
+              ;;
+            "not_configured")
+              status="🔧 Not Configured"
+              color="6c757d"
+              ;;
+            "no_files"|"no_recent_files")
+              status="ℹ️ No Files"
+              color="17a2b8"
+              ;;
+            *)
+              status="❓ Unknown"
+              color="6c757d"
+              ;;
+          esac
+          
+          # Get trigger information
+          case "${{ github.event_name }}" in
+            "workflow_dispatch")
+              if [[ "${{ inputs.upload_all }}" == "true" ]]; then
+                trigger_info="🔄 Manual trigger (upload all files)"
+              else
+                trigger_info="🔄 Manual trigger (recent files only)"
+              fi
+              ;;
+            "schedule")
+              trigger_info="⏰ Scheduled daily upload"
+              ;;
+            "push")
+              trigger_info="📤 Triggered by PNG file changes"
+              ;;
+            *)
+              trigger_info="🔄 Workflow trigger"
+              ;;
+          esac
+          
+          echo "🔍 Notification details:"
+          echo "  Status: $status"
+          echo "  Upload count: $upload_count"
+          echo "  Failed count: $failed_count"
+          echo "  Message: $upload_message"
+          echo "  Trigger: $trigger_info"
+          
+          # Check if Teams webhook is configured
+          teams_webhook="${{ vars.DIAGRAMS_TEAMS_NOTIFICATION_WEBHOOK }}"
+          
+          if [[ -n "$teams_webhook" ]]; then
+            echo "📤 Sending Teams notification..."
+            
+            # Escape message for JSON
+            escaped_message=$(echo "$upload_message" | sed 's/"/\\"/g')
+            escaped_trigger=$(echo "$trigger_info" | sed 's/"/\\"/g')
+            
+            # Create summary text
+            summary_text="SAP BTP Upload $status"
+            
+            response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X POST "$teams_webhook" \
+              -H "Content-Type: application/json" \
+              -d "{
+                \"@type\": \"MessageCard\",
+                \"@context\": \"https://schema.org/extensions\",
+                \"summary\": \"$summary_text\",
+                \"themeColor\": \"$color\",
+                \"title\": \"📁 SAP BTP Document Management Upload\",
+                \"text\": \"**Status:** $status\",
+                \"sections\": [{
+                  \"activityTitle\": \"📋 Upload Details\",
+                  \"facts\": [
+                    {\"name\": \"🔄 Trigger\", \"value\": \"$escaped_trigger\"},
+                    {\"name\": \"📊 Status\", \"value\": \"$status\"},
+                    {\"name\": \"✅ Uploaded\", \"value\": \"$upload_count files\"},
+                    {\"name\": \"❌ Failed\", \"value\": \"$failed_count files\"},
+                    {\"name\": \"💬 Message\", \"value\": \"$escaped_message\"},
+                    {\"name\": \"🔄 Run\", \"value\": \"#${{ github.run_number }}\"}
+                  ]
+                }],
+                \"potentialAction\": [{
+                  \"@type\": \"OpenUri\",
+                  \"name\": \"🔍 View Workflow Run\",
+                  \"targets\": [{
+                    \"os\": \"default\",
+                    \"uri\": \"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"
+                  }]
+                }]
+              }")
+            
+            http_code=$(echo "$response" | grep -o "HTTPSTATUS:[0-9]*" | cut -d: -f2)
+            response_body=$(echo "$response" | sed -E 's/HTTPSTATUS:[0-9]*$//')
+            
+            echo "🔍 Teams notification HTTP Status: $http_code"
+            
+            if [[ "$http_code" -eq 200 || "$http_code" -eq 202 ]]; then
+              echo "✅ Teams notification sent successfully"
+            else
+              echo "❌ Failed to send Teams notification (HTTP $http_code)"
+              echo "Response: $response_body"
+              
+              # Try simplified notification
+              simple_response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X POST "$teams_webhook" \
+                -H "Content-Type: application/json" \
+                -d "{\"text\":\"📁 SAP BTP Upload $status - $upload_count uploaded, $failed_count failed (Run #${{ github.run_number }})\"}")
+              
+              simple_http_code=$(echo "$simple_response" | grep -o "HTTPSTATUS:[0-9]*" | cut -d: -f2)
+              
+              if [[ "$simple_http_code" -eq 200 || "$simple_http_code" -eq 202 ]]; then
+                echo "✅ Simplified Teams notification sent successfully"
+              else
+                echo "❌ Both Teams notification attempts failed"
+              fi
+            fi
+          else
+            echo "⚠️ Teams webhook not configured"
+            echo "ℹ️ Set DIAGRAMS_TEAMS_NOTIFICATION_WEBHOOK organization variable to enable notifications"
+          fi
+          
+          echo ""
+          echo "📊 Final Summary:"
+          echo "- Status: $status"
+          echo "- Files uploaded: $upload_count"
+          echo "- Files failed: $failed_count"
+          echo "- Workflow run: #${{ github.run_number }}"
