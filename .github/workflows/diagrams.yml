@@ -331,12 +331,15 @@ jobs:
             fi
           }
           
-          # Process each file individually
-          for file in $changed_files; do
-            [[ -z "$file" ]] && continue
-            
-            basename=$(basename "$file" .drawio)
-            png_file="png_files/${basename}.png"
+          # Process each file individually - handle filenames with spaces
+          # Convert changed_files to array to properly handle spaces
+          if [[ -n "$changed_files" ]]; then
+            # Use while loop with proper IFS handling for filenames with spaces
+            while IFS= read -r file; do
+              [[ -z "$file" ]] && continue
+              
+              basename=$(basename "$file" .drawio)
+              png_file="png_files/${basename}.png"
             
             echo "🔄 Converting: $file -> $png_file"
             
@@ -392,7 +395,8 @@ jobs:
             echo "🔍 Debug: Last line of changelog: $(tail -n 1 png_files/CHANGELOG.csv)"
           fi
             
-          done
+            done <<< "$changed_files"
+          fi
           
           echo "📊 Conversion Summary:"
           echo "✅ Successfully processed: $processed_count files"
