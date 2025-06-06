@@ -14,3 +14,4 @@ Date,Time,Diagram,Action,Version,Commit,Author,CommitMessage
 05.06.2025,14:09:53,"System","No Diagrams Changed","N/A","e6a58c5","Lucas Dreger","Remove obsolete PNG file, update CHANGELOG to reflect recent changes, and add a new script for verifying SAP BTP Document Management Service credentials."
 06.06.2025,07:47:16,"1","Converted to PNG","1.7","eb6d054","Lucas Dreger","Update 1.drawio"
 06.06.2025,07:48:55,"1","Converted to PNG","1.8","d95dd8e","Lucas Dreger","Update 1.drawio"
+06.06.2025,08:15:08,"1","Converted to PNG","1.9","33ffef0","Lucas Dreger","Update 1.drawio"
