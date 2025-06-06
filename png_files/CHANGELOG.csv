@@ -1,22 +1,3 @@
 Date,Time,Diagram,Action,Version,Commit,Author,CommitMessage
 <<<<<<< HEAD
-05.06.2025,10:34:49,"1","Converted to PNG","1.0","4b7af9f","Lucas Dreger","Update 1.drawio"
-05.06.2025,10:49:10,"1","Converted to PNG","1.1","58bd34d","Lucas Dreger","Update 1.drawio"
-05.06.2025,10:57:36,"System","No Diagrams Changed","N/A","7af3f39","Lucas Dreger","Update 4.1.BTP and SAP Cloud.drawio"
-05.06.2025,11:35:11,"1","Converted to PNG","1.2","e413df6","Lucas Dreger","Update 1.drawio"
-05.06.2025,11:40:11,"System","No Diagrams Changed","N/A","3394af0","Lucas Dreger","fix: Improve file detection for filenames with spaces and add diagnostic tools"
-05.06.2025,11:47:39,"1","Converted to PNG","1.3","24374d4","Lucas Dreger","Update 1.drawio"
-05.06.2025,12:07:59,"1","Converted to PNG","1.4","eba5f1b","Lucas Dreger","Update 1.drawio"
-05.06.2025,13:14:36,"1","Converted to PNG","1.5","515e0b2","Lucas Dreger","Update 1.drawio"
-05.06.2025,13:47:36,"1","Converted to PNG","1.6","469f40d","Lucas Dreger","Update 1.drawio"
-=======
->>>>>>> 0816556 (Remove obsolete PNG file, update CHANGELOG to reflect recent changes, and add a new script for verifying SAP BTP Document Management Service credentials.)
-05.06.2025,14:09:53,"System","No Diagrams Changed","N/A","e6a58c5","Lucas Dreger","Remove obsolete PNG file, update CHANGELOG to reflect recent changes, and add a new script for verifying SAP BTP Document Management Service credentials."
-06.06.2025,07:47:16,"1","Converted to PNG","1.7","eb6d054","Lucas Dreger","Update 1.drawio"
-06.06.2025,07:48:55,"1","Converted to PNG","1.8","d95dd8e","Lucas Dreger","Update 1.drawio"
-06.06.2025,08:15:08,"1","Converted to PNG","1.9","33ffef0","Lucas Dreger","Update 1.drawio"
-06.06.2025,08:43:11,"3.1.SAP","Failed - Source Not Found","1.0","2cadbe7","Lucas Dreger","Update 3.1.SAP BTP and Cloud.drawio"
-06.06.2025,08:43:11,"BTP","Failed - Source Not Found","1.0","2cadbe7","Lucas Dreger","Update 3.1.SAP BTP and Cloud.drawio"
-06.06.2025,08:43:11,"and","Failed - Source Not Found","1.0","2cadbe7","Lucas Dreger","Update 3.1.SAP BTP and Cloud.drawio"
-06.06.2025,08:43:11,"Cloud","Failed - Source Not Found","1.0","2cadbe7","Lucas Dreger","Update 3.1.SAP BTP and Cloud.drawio"
 06.06.2025,08:47:43,"3.1.SAP BTP and Cloud","Converted to PNG","1.0","0294cc9","Lucas Dreger","Update 3.1.SAP BTP and Cloud.drawio"
