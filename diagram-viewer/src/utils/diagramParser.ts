@@ -27,7 +27,7 @@ export function parseDiagramFilename(filename: string): Diagram | null {
     topic,
     level,
     description: description.trim(),
-    path: `/png_files/${filename}`
+    path: `./png_files/${encodeURIComponent(filename)}`
   };
 }
 
