@@ -468,14 +468,6 @@ jobs:
                 
                 git commit -m "Create PNG files directory and changelog [skip ci]"
                 echo "✅ Committed successfully"
-                
-                echo "🔍 Debug: Pulling latest changes before push..."
-                git pull --rebase origin main || git pull origin main
-                echo "✅ Pulled latest changes"
-                
-                echo "🔍 Debug: Pushing to remote..."
-                git push
-                echo "✅ Pushed successfully"
               fi
             else
               echo "⚠️ No png_files directory or content to commit"
@@ -489,14 +481,102 @@ jobs:
             
             git commit -m "Generate PNG files and update changelog [skip ci]"
             echo "✅ Committed successfully"
+          fi
+
+      - name: Push Changes with Conflict Resolution
+        if: always()
+        run: |
+          echo "🔍 Debug: Pushing changes with conflict resolution..."
+          
+          # Configure git for merge conflicts
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          
+          # Check if we have any commits to push
+          if git log origin/main..HEAD --oneline | grep -q .; then
+            echo "📤 Found commits to push, proceeding with push strategy..."
             
-            echo "🔍 Debug: Pulling latest changes before push..."
-            git pull --rebase origin main || git pull origin main
-            echo "✅ Pulled latest changes"
-            
-            echo "🔍 Debug: Pushing to remote..."
-            git push
-            echo "✅ Pushed successfully"
+            # Strategy 1: Try simple push first
+            echo "🔍 Strategy 1: Attempting simple push..."
+            if git push origin main 2>/dev/null; then
+              echo "✅ Simple push successful"
+            else
+              echo "⚠️ Simple push failed, trying pull and push strategy..."
+              
+              # Strategy 2: Pull with merge strategy to avoid rebase conflicts
+              echo "🔍 Strategy 2: Pull with merge strategy..."
+              if git pull --no-rebase origin main 2>/dev/null; then
+                echo "✅ Pull with merge successful"
+                
+                # Try push again
+                if git push origin main; then
+                  echo "✅ Push after merge successful"
+                else
+                  echo "❌ Push after merge failed"
+                fi
+              else
+                echo "⚠️ Pull with merge failed, handling conflicts..."
+                
+                # Strategy 3: Handle merge conflicts in changelog
+                echo "🔍 Strategy 3: Resolving conflicts manually..."
+                
+                # Check if there are merge conflicts
+                if git status --porcelain | grep -q "^UU\|^AA\|^DD"; then
+                  echo "🔧 Detected merge conflicts, resolving..."
+                  
+                  # Specifically handle CHANGELOG.csv conflicts
+                  if [[ -f "png_files/CHANGELOG.csv" ]] && git status --porcelain | grep -q "png_files/CHANGELOG.csv"; then
+                    echo "🔧 Resolving CHANGELOG.csv conflict..."
+                    
+                    # Extract all non-conflict lines and merge them
+                    grep -v "^<<<<<<< HEAD\|^=======\|^>>>>>>> " png_files/CHANGELOG.csv > png_files/CHANGELOG_temp.csv || true
+                    
+                    # Ensure header is present
+                    if ! head -n 1 png_files/CHANGELOG_temp.csv | grep -q "Date,Time,Diagram"; then
+                      echo "Date,Time,Diagram,Action,Version,Commit,Author,CommitMessage" > png_files/CHANGELOG_fixed.csv
+                      grep -v "^Date,Time,Diagram" png_files/CHANGELOG_temp.csv >> png_files/CHANGELOG_fixed.csv 2>/dev/null || true
+                    else
+                      mv png_files/CHANGELOG_temp.csv png_files/CHANGELOG_fixed.csv
+                    fi
+                    
+                    # Remove duplicates and sort by date/time
+                    awk '!seen[$0]++' png_files/CHANGELOG_fixed.csv > png_files/CHANGELOG.csv
+                    rm -f png_files/CHANGELOG_temp.csv png_files/CHANGELOG_fixed.csv
+                    
+                    echo "✅ CHANGELOG.csv conflict resolved"
+                  fi
+                  
+                  # Mark conflicts as resolved
+                  git add png_files/
+                  git commit -m "Resolve merge conflicts in changelog [skip ci]" || true
+                  
+                  # Try push again
+                  if git push origin main; then
+                    echo "✅ Push after conflict resolution successful"
+                  else
+                    echo "❌ Push after conflict resolution failed"
+                  fi
+                else
+                  echo "⚠️ No merge conflicts detected, but pull failed"
+                  
+                  # Strategy 4: Force push (last resort)
+                  echo "🔍 Strategy 4: Attempting force push (last resort)..."
+                  echo "⚠️ This may overwrite remote changes"
+                  
+                  if git push --force-with-lease origin main; then
+                    echo "✅ Force push successful"
+                  else
+                    echo "❌ All push strategies failed"
+                    echo "🔍 Current git status:"
+                    git status
+                    echo "🔍 Recent commits:"
+                    git log --oneline -5
+                  fi
+                fi
+              fi
+            fi
+          else
+            echo "ℹ️ No commits to push"
           fi
 
       - name: Upload to SharePoint
