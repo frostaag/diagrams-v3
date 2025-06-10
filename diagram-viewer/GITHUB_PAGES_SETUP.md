@@ -13,19 +13,25 @@ git commit -m "Add GitHub Pages deployment workflow for diagram viewer"
 git push origin main
 ```
 
-## Step 2: Enable Required Permissions
+## Step 2: Enable GitHub Pages Manually
 
-**IMPORTANT: Do this FIRST before running the workflow!**
+**IMPORTANT: Pages must be enabled manually first!**
 
-1. Go to your repository settings → **Actions** → **General**
+1. Go to your repository **Settings** → **Pages**
+2. Under **Source**, select **GitHub Actions**
+3. Click **Save**
+
+## Step 3: Enable Required Permissions
+
+1. Still in repository settings, go to **Actions** → **General**
 2. Scroll down to **Workflow permissions**
 3. Select **Read and write permissions**
 4. Check **Allow GitHub Actions to create and approve pull requests**
 5. Click **Save**
 
-## Step 3: Run the Workflow
+## Step 4: Run the Workflow
 
-The workflow will automatically enable Pages and configure it:
+Now the workflow can deploy to the enabled Pages:
 
 1. Go to the **Actions** tab in your repository
 2. Click on **Deploy Diagram Viewer to GitHub Pages** workflow
