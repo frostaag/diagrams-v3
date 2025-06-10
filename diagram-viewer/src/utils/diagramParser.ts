@@ -37,6 +37,7 @@ export function getDiagramList(): Promise<Diagram[]> {
   const knownFiles = [
     '0.1. Monitoring Proposed Strategy.png',
     '0.1.System Monitoring Idea.png',
+    '0.2. FRoSTA Azure.png',
     '0.2.External User Identity Provision Idea.png',
     '3.1. SAP Task Center.png',
     '3.1.SAP BTP and Cloud.png',
