@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-gray-50 text-gray-900;
+    font-family: '72', Arial, sans-serif;
+  }
+}
+
+@layer components {
+  .sap-card {
+    @apply bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow duration-200;
+  }
+  
+  .sap-header {
+    @apply bg-sap-blue text-white p-4 rounded-t-lg;
+  }
+  
+  .sap-button {
+    @apply bg-sap-blue hover:bg-sap-dark-blue text-white px-4 py-2 rounded transition-colors duration-200;
+  }
+  
+  .sap-tile {
+    @apply bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-lg transition-all duration-200 cursor-pointer;
+  }
+}
