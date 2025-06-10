@@ -1,10 +1,10 @@
-name: Deploy to GitHub Pages
+name: Deploy Diagram Viewer to GitHub Pages
 
 on:
   push:
     branches: [ main ]
-  pull_request:
-    branches: [ main ]
+    paths: [ 'diagram-viewer/**' ]
+  workflow_dispatch:
 
 jobs:
   build-and-deploy:
@@ -24,12 +24,17 @@ jobs:
       with:
         node-version: '18'
         cache: 'npm'
+        cache-dependency-path: 'diagram-viewer/package-lock.json'
 
     - name: Install dependencies
-      run: npm ci
+      run: |
+        cd diagram-viewer
+        npm ci
 
     - name: Build
-      run: npm run build
+      run: |
+        cd diagram-viewer
+        npm run build
 
     - name: Setup Pages
       uses: actions/configure-pages@v4
@@ -37,7 +42,7 @@ jobs:
     - name: Upload artifact
       uses: actions/upload-pages-artifact@v3
       with:
-        path: './dist'
+        path: './diagram-viewer/dist'
 
     - name: Deploy to GitHub Pages
       id: deployment

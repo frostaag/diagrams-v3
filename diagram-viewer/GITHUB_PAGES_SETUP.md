@@ -4,11 +4,12 @@ Follow these steps to deploy your SAP Diagram Viewer to GitHub Pages:
 
 ## Step 1: Push the GitHub Actions Workflow
 
-Make sure to commit and push the `.github/workflows/deploy.yml` file I just created:
+The workflow has been created in the root `.github/workflows/deploy-diagram-viewer.yml` file. 
+Commit and push it:
 
 ```bash
-git add .github/workflows/deploy.yml
-git commit -m "Add GitHub Pages deployment workflow"
+git add .github/workflows/deploy-diagram-viewer.yml
+git commit -m "Add GitHub Pages deployment workflow for diagram viewer"
 git push origin main
 ```
 
