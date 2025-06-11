@@ -31,28 +31,31 @@ export function parseDiagramFilename(filename: string): Diagram | null {
   };
 }
 
-export function getDiagramList(): Promise<Diagram[]> {
-  // In a real implementation, this would scan the png_files directory
-  // For now, we'll return the known diagrams
-  const knownFiles = [
-    '0.1. Monitoring Proposed Strategy.png',
-    '0.1.System Monitoring Idea.png',
-    '0.2. FRoSTA Azure.png',
-    '0.2.External User Identity Provision Idea.png',
-    '3.1. SAP Task Center.png',
-    '3.1.SAP BTP and Cloud.png',
-    '3.1.SAP Cloud Simplified.png',
-    '3.1.User Provisioning Strategy.png',
-    '3.2.Business Partner - Seeburger connection.png',
-    '3.2.MyTime - Connection SAP-ATOSS.png',
-    '3.3. Workzone and Mobile Start.png'
-  ];
-  
-  const diagrams = knownFiles
-    .map(parseDiagramFilename)
-    .filter((diagram): diagram is Diagram => diagram !== null);
-  
-  return Promise.resolve(diagrams);
+export async function getDiagramList(): Promise<Diagram[]> {
+  try {
+    // Fetch the dynamic list of diagrams from the API
+    const response = await fetch('./api/diagrams.json');
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch diagrams: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    const availableFiles = data.diagrams || [];
+    
+    console.log('Loaded diagrams:', availableFiles);
+    
+    const diagrams = availableFiles
+      .map((filename: string) => parseDiagramFilename(filename))
+      .filter((diagram: Diagram | null): diagram is Diagram => diagram !== null);
+    
+    return diagrams;
+  } catch (error) {
+    console.error('Error loading diagrams:', error);
+    
+    // Fallback to empty array if API fails
+    return [];
+  }
 }
 
 export function groupDiagramsByTopic(diagrams: Diagram[]): Map<DiagramTopic, Diagram[]> {

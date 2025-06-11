@@ -7,30 +7,40 @@ echo "🔄 Auto-updating SAP Diagram Viewer..."
 echo "📁 Copying new PNG files..."
 cp png_files/*.png diagram-viewer/public/png_files/ 2>/dev/null || echo "No new PNG files to copy"
 
-# Step 2: Scan for all PNG files and update the parser
+# Step 2: Scan for all PNG files and update the API
 echo "🔍 Scanning for PNG files..."
 cd diagram-viewer
 
 # Generate the updated file list
-echo "📝 Updating diagram parser with current files..."
-PNG_FILES=$(ls public/png_files/*.png 2>/dev/null | xargs -n 1 basename | grep -v "CHANGELOG.csv" | sort)
+echo "📝 Updating diagrams API with current files..."
 
-# Create the new knownFiles array
-NEW_KNOWN_FILES="  const knownFiles = ["
-while IFS= read -r file; do
-    if [ ! -z "$file" ]; then
-        NEW_KNOWN_FILES="$NEW_KNOWN_FILES
-    '$file',"
+# Create the new API JSON file
+echo '{' > public/api/diagrams.json
+echo '  "diagrams": [' >> public/api/diagrams.json
+
+FIRST=true
+for file in public/png_files/*.png; do
+    if [ -f "$file" ]; then
+        filename=$(basename "$file")
+        if [ "$filename" != "CHANGELOG.csv" ]; then
+            if [ "$FIRST" = true ]; then
+                FIRST=false
+            else
+                echo ',' >> public/api/diagrams.json
+            fi
+            echo -n "    \"$filename\"" >> public/api/diagrams.json
+        fi
     fi
-done <<< "$PNG_FILES"
-NEW_KNOWN_FILES="$NEW_KNOWN_FILES
-  ];"
+done
 
-# Update the parser file
-sed -i.bak '/const knownFiles = \[/,/\];/c\
-'"$NEW_KNOWN_FILES"'' src/utils/diagramParser.ts
+echo '' >> public/api/diagrams.json
+echo '  ]' >> public/api/diagrams.json
+echo '}' >> public/api/diagrams.json
 
-echo "✅ Updated parser with $(echo "$PNG_FILES" | wc -l | tr -d ' ') diagram files"
+# Count the files for output
+FILE_COUNT=$(find public/png_files/ -name "*.png" -not -name "CHANGELOG.csv" | wc -l | tr -d ' ')
+
+echo "✅ Updated API with $FILE_COUNT diagram files"
 
 # Step 3: Build the updated application
 echo "🏗️ Building updated application..."
