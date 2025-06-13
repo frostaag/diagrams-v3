@@ -2,52 +2,108 @@ name: Deploy Diagram Viewer to GitHub Pages
 
 on:
   push:
-    branches: [ main ]
-    paths: [ 'diagram-viewer/**' ]
+    paths:
+      - 'png_files/**/*.png'
+      - 'diagram-viewer/**'
   workflow_dispatch:
 
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
 jobs:
-  build-and-deploy:
-    runs-on: ubuntu-latest
-    
+  deploy:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    
-    permissions:
-      contents: read
-      pages: write
-      id-token: write
-
+    runs-on: ubuntu-latest
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18'
-        cache: 'npm'
-        cache-dependency-path: 'diagram-viewer/package-lock.json'
-
-    - name: Install dependencies
-      run: |
-        cd diagram-viewer
-        npm ci
-
-    - name: Build
-      run: |
-        cd diagram-viewer
-        npm run build
-
-    - name: Setup Pages
-      uses: actions/configure-pages@v4
-
-    - name: Upload artifact
-      uses: actions/upload-pages-artifact@v3
-      with:
-        path: './diagram-viewer/dist'
-
-    - name: Deploy to GitHub Pages
-      id: deployment
-      uses: actions/deploy-pages@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: diagram-viewer/package-lock.json
+          
+      - name: Install dependencies
+        working-directory: diagram-viewer
+        run: npm ci
+        
+      - name: Copy PNG files to diagram viewer
+        run: |
+          echo "📁 Copying PNG files to diagram viewer..."
+          mkdir -p diagram-viewer/public/png_files
+          cp -r png_files/*.png diagram-viewer/public/png_files/ 2>/dev/null || echo "No PNG files to copy"
+          
+      - name: Update diagrams API
+        working-directory: diagram-viewer
+        run: |
+          echo "📝 Updating diagrams API..."
+          node -e "
+          const fs = require('fs');
+          const path = require('path');
+          
+          const pngDir = path.join(__dirname, 'public/png_files');
+          const diagrams = [];
+          
+          if (fs.existsSync(pngDir)) {
+            const files = fs.readdirSync(pngDir).filter(f => f.endsWith('.png'));
+            
+            files.forEach(filename => {
+              const parts = filename.replace('.png', '').split('.');
+              if (parts.length >= 3) {
+                const techId = parseInt(parts[0]) || 0;
+                const detailLevel = parseInt(parts[1]) || 1;
+                const description = parts.slice(2).join('.').trim();
+                
+                diagrams.push({
+                  id: filename.replace('.png', '').replace(/[^a-zA-Z0-9]/g, '_'),
+                  filename: filename,
+                  techId: techId,
+                  detailLevel: detailLevel,
+                  description: description,
+                  size: fs.statSync(path.join(pngDir, filename)).size
+                });
+              }
+            });
+          }
+          
+          diagrams.sort((a, b) => {
+            if (a.techId !== b.techId) return a.techId - b.techId;
+            if (a.detailLevel !== b.detailLevel) return a.detailLevel - b.detailLevel;
+            return a.description.localeCompare(b.description);
+          });
+          
+          const apiData = {
+            lastUpdated: new Date().toISOString(),
+            totalDiagrams: diagrams.length,
+            diagrams: diagrams
+          };
+          
+          fs.writeFileSync('public/api/diagrams.json', JSON.stringify(apiData, null, 2));
+          console.log('✅ Updated API with', diagrams.length, 'diagram files');
+          "
+          
+      - name: Build
+        working-directory: diagram-viewer
+        run: npm run build
+        
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+        
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: diagram-viewer/dist
+          
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
