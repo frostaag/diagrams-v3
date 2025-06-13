@@ -1,20 +1,36 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getDiagramList, groupDiagramsByTopic } from '@/utils/diagramParser';
 import { Diagram, DiagramTopic } from '@/types/diagram';
 import { TopicSection } from '@/components/TopicSection';
 import { DiagramModal } from '@/components/DiagramModal';
-import { Search, Folder } from 'lucide-react';
+import { forceRefresh } from '@/utils/cacheManager';
+import { Search, Folder, RefreshCw } from 'lucide-react';
 
 function App() {
   const [selectedDiagram, setSelectedDiagram] = useState<Diagram | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const queryClient = useQueryClient();
 
   const { data: diagrams = [], isLoading, error } = useQuery({
     queryKey: ['diagrams'],
     queryFn: getDiagramList
   });
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    
+    // Invalidate and refetch the diagrams query
+    await queryClient.invalidateQueries({ queryKey: ['diagrams'] });
+    
+    // Force refresh the entire page as fallback
+    setTimeout(() => {
+      forceRefresh();
+    }, 1000);
+  };
 
   const filteredDiagrams = diagrams.filter(diagram =>
     diagram.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -74,18 +90,30 @@ function App() {
               </div>
             </div>
 
-            {/* Search */}
-            <div className="relative max-w-md w-full">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Search className="h-5 w-5 text-gray-400" />
+            <div className="flex items-center gap-4">
+              {/* Refresh Button */}
+              <button
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+                className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Refresh diagrams and clear cache"
+              >
+                <RefreshCw className={`w-5 h-5 ${isRefreshing ? 'animate-spin' : ''}`} />
+              </button>
+
+              {/* Search */}
+              <div className="relative max-w-md w-full">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Search className="h-5 w-5 text-gray-400" />
+                </div>
+                <input
+                  type="text"
+                  placeholder="Search diagrams..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-sap-blue focus:border-sap-blue"
+                />
               </div>
-              <input
-                type="text"
-                placeholder="Search diagrams..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-sap-blue focus:border-sap-blue"
-              />
             </div>
           </div>
         </div>

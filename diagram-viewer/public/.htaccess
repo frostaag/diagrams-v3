@@ -1,0 +1,32 @@
+# Cache Control for Diagram Viewer
+
+# Disable caching for HTML files and API endpoints
+<FilesMatch "\.(html|json)$">
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+    Header set Pragma "no-cache"
+    Header set Expires "0"
+</FilesMatch>
+
+# Short cache for images (1 hour) to allow for updates
+<FilesMatch "\.(png|jpg|jpeg|gif|svg|ico)$">
+    Header set Cache-Control "public, max-age=3600"
+</FilesMatch>
+
+# Cache JavaScript and CSS files for 1 day but allow revalidation
+<FilesMatch "\.(js|css)$">
+    Header set Cache-Control "public, max-age=86400, must-revalidate"
+</FilesMatch>
+
+# Force revalidation for main entry files
+<Files "index.html">
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+    Header set Pragma "no-cache"
+    Header set Expires "0"
+</Files>
+
+# Prevent caching of the diagrams.json API file
+<Files "diagrams.json">
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+    Header set Pragma "no-cache"
+    Header set Expires "0"
+</Files>

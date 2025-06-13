@@ -22,19 +22,28 @@ export function parseDiagramFilename(filename: string): Diagram | null {
     return null;
   }
   
+  // Add cache busting timestamp to image path
+  const timestamp = new Date().getTime();
   return {
     filename,
     topic,
     level,
     description: description.trim(),
-    path: `./png_files/${encodeURIComponent(filename)}`
+    path: `./png_files/${encodeURIComponent(filename)}?v=${timestamp}`
   };
 }
 
 export async function getDiagramList(): Promise<Diagram[]> {
   try {
-    // Fetch the dynamic list of diagrams from the API
-    const response = await fetch('./api/diagrams.json');
+    // Add cache busting with timestamp to ensure fresh data
+    const timestamp = new Date().getTime();
+    const response = await fetch(`./api/diagrams.json?v=${timestamp}`, {
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      }
+    });
     
     if (!response.ok) {
       throw new Error(`Failed to fetch diagrams: ${response.status}`);

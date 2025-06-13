@@ -12,7 +12,9 @@ export function DiagramModal({ diagram, isOpen, onClose }: DiagramModalProps) {
 
   const handleDownload = () => {
     const link = document.createElement('a');
-    link.href = diagram.path;
+    // Remove cache busting parameter for download
+    const cleanPath = diagram.path.split('?')[0];
+    link.href = cleanPath;
     link.download = diagram.filename;
     document.body.appendChild(link);
     link.click();
@@ -20,6 +22,7 @@ export function DiagramModal({ diagram, isOpen, onClose }: DiagramModalProps) {
   };
 
   const handleOpenInNewTab = () => {
+    // Use the cache-busted path for viewing
     window.open(diagram.path, '_blank');
   };
 
