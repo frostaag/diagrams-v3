@@ -756,388 +756,7 @@ jobs:
             echo "🔍 Debug: ACCESS_TOKEN starts with: $(echo "$ACCESS_TOKEN" | head -c 20)..."
           fi
 
-      - name: Upload PNG files to SAP BTP Document Management
-        id: sap_upload
-        if: always()
-        continue-on-error: true
-        run: |
-          echo "🔍 Debug: SAP BTP upload step starting..."
-          echo "🔍 Debug: Convert step result: ${{ steps.convert.result }}"
-          echo "🔍 Debug: Convert step conclusion: ${{ steps.convert.conclusion }}"
-          echo "🔍 Debug: Convert step outcome: ${{ steps.convert.outcome }}"
-          echo "🔍 Debug: Processed count: ${{ steps.convert.outputs.processed }}"
-          
-          echo "🔍 Starting SAP BTP Document Management upload..."
-          
-          # Check if SAP BTP variables are configured
-          sap_token_url="${{ vars.DIAGRAMS_SAP_BTP_TOKEN_URL }}"
-          sap_client_id="${{ vars.DIAGRAMS_SAP_BTP_CLIENT_ID }}"
-          sap_dm_base_url="${{ vars.DIAGRAMS_SAP_BTP_DM_BASE_URL }}"
-          sap_repository_id="${{ vars.DIAGRAMS_SAP_BTP_REPOSITORY_ID }}"
-          
-          echo "🔍 Debug: SAP BTP Token URL configured: $(if [[ -n "$sap_token_url" ]]; then echo "Yes"; else echo "No"; fi)"
-          echo "🔍 Debug: SAP BTP Client ID configured: $(if [[ -n "$sap_client_id" ]]; then echo "Yes"; else echo "No"; fi)"
-          echo "🔍 Debug: SAP BTP DM Base URL configured: $(if [[ -n "$sap_dm_base_url" ]]; then echo "Yes"; else echo "No"; fi)"
-          echo "🔍 Debug: SAP BTP Repository ID configured: $(if [[ -n "$sap_repository_id" ]]; then echo "Yes"; else echo "No"; fi)"
-          
-          if [[ -n "$sap_token_url" && -n "$sap_client_id" && -n "$sap_dm_base_url" ]]; then
-            echo "📤 Getting SAP BTP access token..."
-            echo "🔍 Debug: Token URL: $(echo "$sap_token_url" | sed 's/\(.*\)\/oauth\/token.*/\1\/oauth\/token/')"
-            echo "🔍 Debug: Client ID: $(echo "$sap_client_id" | head -c 10)..."
-            
-            # Check client secret safely
-            sap_client_secret="${{ secrets.DIAGRAMS_SAP_BTP_CLIENT_SECRET }}"
-            if [[ -n "$sap_client_secret" ]]; then
-              echo "🔍 Debug: Client Secret configured: Yes (${#sap_client_secret} chars)"
-            else
-              echo "🔍 Debug: Client Secret configured: No"
-            fi
-            
-            echo "🔍 Debug: DM Base URL: $sap_dm_base_url"
-            
-            # Get access token for SAP BTP Document Management
-            echo "🔍 Debug: About to make OAuth request..."
-            echo "🔍 Debug: Client ID first 20 chars: $(echo "$sap_client_id" | head -c 20)..."
-            echo "🔍 Debug: Client ID last 10 chars: ...$(echo "$sap_client_id" | tail -c 10)"
-            echo "🔍 Debug: Client Secret first 5 chars: $(echo "$sap_client_secret" | head -c 5)..."
-            echo "🔍 Debug: Client Secret last 5 chars: ...$(echo "$sap_client_secret" | tail -c 5)"
-            
-            # Enhanced curl request with proper URL encoding
-            echo "🔍 Debug: Testing different authentication methods..."
-            
-            # Method 1: Using form data with proper URL encoding
-            sap_token_response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X POST "$sap_token_url" \
-              -H "Content-Type: application/x-www-form-urlencoded" \
-              -H "Accept: application/json" \
-              --data-urlencode "grant_type=client_credentials" \
-              --data-urlencode "client_id=$sap_client_id" \
-              --data-urlencode "client_secret=$sap_client_secret" \
-              --max-time 30 \
-              2>/dev/null || echo "CURL_FAILED")
-            
-            echo "🔍 Debug: Method 1 (URL encoded) result:"
-            sap_token_http_code=$(echo "$sap_token_response" | grep -o "HTTPSTATUS:[0-9]*" | cut -d: -f2)
-            sap_token_response_body=$(echo "$sap_token_response" | sed -E 's/HTTPSTATUS:[0-9]*$//')
-            echo "🔍 Debug: HTTP Status: $sap_token_http_code"
-            
-            # If Method 1 fails, try Method 2: Basic Auth
-            if [[ "$sap_token_http_code" -ne 200 ]]; then
-              echo "🔍 Debug: Method 1 failed, trying Basic Auth..."
-              
-              # Create base64 encoded credentials for Basic Auth
-              basic_auth=$(echo -n "${sap_client_id}:${sap_client_secret}" | base64 -w 0)
-              
-              sap_token_response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X POST "$sap_token_url" \
-                -H "Content-Type: application/x-www-form-urlencoded" \
-                -H "Accept: application/json" \
-                -H "Authorization: Basic $basic_auth" \
-                -d "grant_type=client_credentials" \
-                --max-time 30 \
-                2>/dev/null || echo "CURL_FAILED")
-              
-              echo "🔍 Debug: Method 2 (Basic Auth) result:"
-              sap_token_http_code=$(echo "$sap_token_response" | grep -o "HTTPSTATUS:[0-9]*" | cut -d: -f2)
-              sap_token_response_body=$(echo "$sap_token_response" | sed -E 's/HTTPSTATUS:[0-9]*$//')
-              echo "🔍 Debug: HTTP Status: $sap_token_http_code"
-            fi
-            
-            # If Method 2 fails, try Method 3: Manual form encoding
-            if [[ "$sap_token_http_code" -ne 200 ]]; then
-              echo "🔍 Debug: Method 2 failed, trying manual form encoding..."
-              
-              # Manually URL encode special characters
-              encoded_client_id=$(echo -n "$sap_client_id" | sed 's/!/%21/g' | sed 's/|/%7C/g')
-              encoded_client_secret=$(echo -n "$sap_client_secret" | sed 's/=/%3D/g' | sed 's/+/%2B/g' | sed 's!/!%2F!g')
-              
-              echo "🔍 Debug: Original Client ID: ${sap_client_id:0:30}..."
-              echo "🔍 Debug: Encoded Client ID: ${encoded_client_id:0:30}..."
-              
-              sap_token_response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X POST "$sap_token_url" \
-                -H "Content-Type: application/x-www-form-urlencoded" \
-                -H "Accept: application/json" \
-                -d "grant_type=client_credentials&client_id=${encoded_client_id}&client_secret=${encoded_client_secret}" \
-                --max-time 30 \
-                2>/dev/null || echo "CURL_FAILED")
-              
-              echo "🔍 Debug: Method 3 (Manual encoding) result:"
-              sap_token_http_code=$(echo "$sap_token_response" | grep -o "HTTPSTATUS:[0-9]*" | cut -d: -f2)
-              sap_token_response_body=$(echo "$sap_token_response" | sed -E 's/HTTPSTATUS:[0-9]*$//')
-              echo "🔍 Debug: HTTP Status: $sap_token_http_code"
-            fi
-            
-            echo "🔍 Debug: Final SAP BTP token HTTP Status: $sap_token_http_code"
-            echo "🔍 Debug: Response body (truncated): $(echo "$sap_token_response_body" | head -c 200)..."
-            
-            sap_token_http_code=$(echo "$sap_token_response" | grep -o "HTTPSTATUS:[0-9]*" | cut -d: -f2)
-            sap_token_response_body=$(echo "$sap_token_response" | sed -E 's/HTTPSTATUS:[0-9]*$//')
-            
-            echo "🔍 Debug: SAP BTP token HTTP Status: $sap_token_http_code"
-            echo "🔍 Debug: Full curl response (sanitized): $sap_token_response_body"
-            
-            if [[ "$sap_token_http_code" -eq 200 ]]; then
-              sap_access_token=$(echo "$sap_token_response_body" | jq -r '.access_token' 2>/dev/null || echo "")
-              
-              if [[ -n "$sap_access_token" && "$sap_access_token" != "null" ]]; then
-                echo "✅ SAP BTP access token obtained successfully"
-                echo "🔍 Debug: Token length: ${#sap_access_token}"
-                
-                # Ensure Diagrams folder exists in SAP DM (check and create on every run)
-                diagrams_folder_id=""
-                
-                echo "📁 Ensuring Diagrams folder exists in SAP Document Management..."
-                
-                # Use repository ID if configured, otherwise default to root
-                if [[ -n "$sap_repository_id" ]]; then
-                  echo "🔍 Debug: Using configured repository ID: $sap_repository_id"
-                  sap_root_path="/browser/${sap_repository_id}/root"
-                else
-                  echo "🔍 Debug: No repository ID configured, using default root"
-                  sap_root_path="/browser/objects/root"
-                fi
-                
-                # Always check for existing Diagrams folder first
-                echo "🔍 Debug: Searching for existing Diagrams folder..."
-                echo "🔍 Debug: API URL: ${sap_dm_base_url}${sap_root_path}/children"
-                folders_response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X GET \
-                  "${sap_dm_base_url}${sap_root_path}/children?filter=objectType%20eq%20'folder'%20and%20name%20eq%20'Diagrams'" \
-                  -H "Authorization: Bearer $sap_access_token" \
-                  -H "Accept: application/json")
-                
-                folders_http_code=$(echo "$folders_response" | grep -o "HTTPSTATUS:[0-9]*" | cut -d: -f2)
-                folders_response_body=$(echo "$folders_response" | sed -E 's/HTTPSTATUS:[0-9]*$//')
-                
-                echo "🔍 Debug: Folders search HTTP Status: $folders_http_code"
-                
-                if [[ "$folders_http_code" -eq 200 ]]; then
-                  # Check if Diagrams folder exists
-                  folder_count=$(echo "$folders_response_body" | jq -r '.objects | length' 2>/dev/null || echo "0")
-                  
-                  if [[ "$folder_count" -gt 0 ]]; then
-                    diagrams_folder_id=$(echo "$folders_response_body" | jq -r '.objects[0].id' 2>/dev/null || echo "")
-                    echo "✅ Found existing Diagrams folder: $diagrams_folder_id"
-                  fi
-                fi
-                
-                # If folder doesn't exist or couldn't be found, create it
-                if [[ -z "$diagrams_folder_id" || "$diagrams_folder_id" == "null" ]]; then
-                  echo "📁 Creating Diagrams folder in SAP Document Management..."
-                  echo "🔍 Debug: Create folder URL: ${sap_dm_base_url}${sap_root_path}/children"
-                  
-                  create_folder_response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X POST \
-                    "${sap_dm_base_url}${sap_root_path}/children" \
-                    -H "Authorization: Bearer $sap_access_token" \
-                    -H "Content-Type: application/json" \
-                    -H "Accept: application/json" \
-                    -d '{
-                      "name": "Diagrams",
-                      "description": "Automatically generated diagram files from GitHub workflow",
-                      "objectType": "folder"
-                    }')
-                  
-                  create_folder_http_code=$(echo "$create_folder_response" | grep -o "HTTPSTATUS:[0-9]*" | cut -d: -f2)
-                  create_folder_response_body=$(echo "$create_folder_response" | sed -E 's/HTTPSTATUS:[0-9]*$//')
-                  
-                  echo "🔍 Debug: Create folder HTTP Status: $create_folder_http_code"
-                  
-                  if [[ "$create_folder_http_code" -eq 201 ]]; then
-                    diagrams_folder_id=$(echo "$create_folder_response_body" | jq -r '.id' 2>/dev/null || echo "")
-                    echo "✅ Successfully created Diagrams folder: $diagrams_folder_id"
-                  elif [[ "$create_folder_http_code" -eq 409 ]]; then
-                    # Folder already exists (conflict), try to find it again
-                    echo "📁 Diagrams folder already exists (HTTP 409), searching again..."
-                    retry_folders_response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X GET \
-                      "${sap_dm_base_url}${sap_root_path}/children?filter=objectType%20eq%20'folder'%20and%20name%20eq%20'Diagrams'" \
-                      -H "Authorization: Bearer $sap_access_token" \
-                      -H "Accept: application/json")
-                    
-                    retry_folders_http_code=$(echo "$retry_folders_response" | grep -o "HTTPSTATUS:[0-9]*" | cut -d: -f2)
-                    retry_folders_response_body=$(echo "$retry_folders_response" | sed -E 's/HTTPSTATUS:[0-9]*$//')
-                    
-                    if [[ "$retry_folders_http_code" -eq 200 ]]; then
-                      retry_folder_count=$(echo "$retry_folders_response_body" | jq -r '.objects | length' 2>/dev/null || echo "0")
-                      if [[ "$retry_folder_count" -gt 0 ]]; then
-                        diagrams_folder_id=$(echo "$retry_folders_response_body" | jq -r '.objects[0].id' 2>/dev/null || echo "")
-                        echo "✅ Found Diagrams folder after conflict: $diagrams_folder_id"
-                      fi
-                    fi
-                  else
-                    echo "❌ Failed to create Diagrams folder (HTTP $create_folder_http_code)"
-                    echo "🔍 Debug: Response: $create_folder_response_body"
-                  fi
-                fi
-                
-                # Final fallback: use appropriate root path if we still don't have a folder ID
-                if [[ -z "$diagrams_folder_id" || "$diagrams_folder_id" == "null" ]]; then
-                  echo "⚠️ Could not create or find Diagrams folder, using root as fallback"
-                  if [[ -n "$sap_repository_id" ]]; then
-                    diagrams_folder_id="${sap_repository_id}/root"
-                    echo "🔍 Debug: Using repository root: $diagrams_folder_id"
-                  else
-                    diagrams_folder_id="root"
-                    echo "🔍 Debug: Using default root: $diagrams_folder_id"
-                  fi
-                else
-                  echo "📁 Using Diagrams folder for uploads: $diagrams_folder_id"
-                fi
-                
-                # Upload PNG files to SAP Document Management
-                upload_count=0
-                failed_upload_count=0
-                
-                for png_file in png_files/*.png; do
-                  if [[ -f "$png_file" ]]; then
-                    filename=$(basename "$png_file")
-                    echo "📤 Uploading $filename to SAP Document Management..."
-                    
-                    # Get file metadata for upload
-                    file_size=$(stat -c%s "$png_file" 2>/dev/null || stat -f%z "$png_file" 2>/dev/null || echo "0")
-                    
-                    # First, create the document object
-                    # Construct the correct URL based on whether we have a folder ID or are using root
-                    if [[ "$diagrams_folder_id" == *"/root" ]]; then
-                      # Using repository root
-                      upload_url="${sap_dm_base_url}/browser/${diagrams_folder_id}/children"
-                    else
-                      # Using a specific folder ID
-                      upload_url="${sap_dm_base_url}/browser/objects/${diagrams_folder_id}/children"
-                    fi
-                    
-                    echo "🔍 Debug: Upload URL: $upload_url"
-                    
-                    create_doc_response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X POST \
-                      "$upload_url" \
-                      -H "Authorization: Bearer $sap_access_token" \
-                      -H "Content-Type: application/json" \
-                      -H "Accept: application/json" \
-                      -d "{
-                        \"name\": \"$filename\",
-                        \"description\": \"Automatically generated diagram from GitHub workflow\",
-                        \"objectType\": \"document\",
-                        \"contentType\": \"image/png\"
-                      }")
-                    
-                    create_doc_http_code=$(echo "$create_doc_response" | grep -o "HTTPSTATUS:[0-9]*" | cut -d: -f2)
-                    create_doc_response_body=$(echo "$create_doc_response" | sed -E 's/HTTPSTATUS:[0-9]*$//')
-                    
-                    echo "🔍 Debug: Create document HTTP Status: $create_doc_http_code"
-                    
-                    if [[ "$create_doc_http_code" -eq 201 ]]; then
-                      document_id=$(echo "$create_doc_response_body" | jq -r '.id' 2>/dev/null || echo "")
-                      
-                      if [[ -n "$document_id" && "$document_id" != "null" ]]; then
-                        echo "📄 Created document object: $document_id"
-                        
-                        # Upload the actual file content
-                        upload_response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X PUT \
-                          "${sap_dm_base_url}/browser/objects/${document_id}/content" \
-                          -H "Authorization: Bearer $sap_access_token" \
-                          -H "Content-Type: image/png" \
-                          --data-binary @"$png_file")
-                        
-                        upload_http_code=$(echo "$upload_response" | grep -o "HTTPSTATUS:[0-9]*" | cut -d: -f2)
-                        upload_response_body=$(echo "$upload_response" | sed -E 's/HTTPSTATUS:[0-9]*$//')
-                        
-                        echo "🔍 Debug: File upload HTTP Status: $upload_http_code"
-                        
-                        if [[ "$upload_http_code" -eq 200 || "$upload_http_code" -eq 201 ]]; then
-                          echo "✅ Successfully uploaded $filename to SAP Document Management"
-                          ((upload_count++))
-                        else
-                          echo "❌ Failed to upload file content for $filename (HTTP $upload_http_code)"
-                          echo "🔍 Debug: Upload response: $upload_response_body"
-                          ((failed_upload_count++))
-                        fi
-                      else
-                        echo "❌ Could not extract document ID from response"
-                        ((failed_upload_count++))
-                      fi
-                    else
-                      echo "❌ Failed to create document object for $filename (HTTP $create_doc_http_code)"
-                      echo "🔍 Debug: Create doc response: $create_doc_response_body"
-                      ((failed_upload_count++))
-                    fi
-                  fi
-                done
-                
-                echo "📊 SAP BTP Upload Summary:"
-                echo "✅ Successfully uploaded: $upload_count files"
-                echo "❌ Failed uploads: $failed_upload_count files"
-                
-                # Set output for Teams notification
-                if [[ $upload_count -gt 0 ]]; then
-                  echo "sap_status=success" >> $GITHUB_OUTPUT
-                  echo "sap_message=Uploaded $upload_count files to SAP BTP" >> $GITHUB_OUTPUT
-                else
-                  echo "sap_status=failed" >> $GITHUB_OUTPUT
-                  echo "sap_message=Failed to upload files to SAP BTP" >> $GITHUB_OUTPUT
-                fi
-                
-              else
-                echo "❌ Could not extract access token from SAP BTP response"
-                echo "🔍 Debug: Token response: $sap_token_response_body"
-                echo "sap_status=failed" >> $GITHUB_OUTPUT
-                echo "sap_message=Could not extract access token" >> $GITHUB_OUTPUT
-              fi
-            else
-              echo "❌ Failed to get SAP BTP access token (HTTP $sap_token_http_code)"
-              echo "🔍 Debug: Token response: $sap_token_response_body"
-              
-              # Provide specific troubleshooting advice based on error
-              if [[ "$sap_token_http_code" -eq 401 ]]; then
-                echo ""
-                echo "🔧 SAP BTP Authentication Troubleshooting (HTTP 401):"
-                echo "   This indicates invalid credentials. Please verify:"
-                echo "   1. Client ID is correct (starts with 'sb-' and ends with service instance GUID)"
-                echo "   2. Client Secret is the correct value from service key"
-                echo "   3. Token URL matches your subaccount's authentication domain"
-                echo ""
-                echo "📋 Current Configuration Check:"
-                echo "   • Token URL: $sap_token_url"
-                echo "   • Client ID format: $(echo "$sap_client_id" | grep -E '^sb-[a-f0-9-]+!\w+\|\w+!\w+$' && echo "✅ Valid format" || echo "❌ Invalid format")"
-                echo "   • Client ID length: ${#sap_client_id} chars (should be ~80-120)"
-                echo "   • Client Secret length: ${#sap_client_secret} chars (should be ~40-50)"
-                echo ""
-                echo "🔍 Expected formats:"
-                echo "   • Client ID: sb-[uuid]![service]|[plan]![instance]"
-                echo "   • Example: sb-a89eef4d-1cc2-4171-a69a-19fd2b4dbaa9!b523612|sdm-di-SDM_DI_PROD-prod!b41064"
-                echo ""
-                echo "💡 To get correct values:"
-                echo "   1. Go to SAP BTP Cockpit → Your Subaccount"
-                echo "   2. Services → Instances and Subscriptions"
-                echo "   3. Find your Document Management instance"
-                echo "   4. Create/View Service Key"
-                echo "   5. Use 'clientid' and 'clientsecret' from the service key"
-              elif [[ "$sap_token_http_code" -eq 400 ]]; then
-                echo ""
-                echo "🔧 SAP BTP Request Format Error (HTTP 400):"
-                echo "   Check that the OAuth request format is correct"
-                echo "   Verify grant_type=client_credentials is supported"
-              elif [[ "$sap_token_http_code" -eq 404 ]]; then
-                echo ""
-                echo "🔧 SAP BTP Endpoint Not Found (HTTP 404):"
-                echo "   Token URL appears to be incorrect"
-                echo "   Expected format: https://[subdomain].authentication.[region].hana.ondemand.com/oauth/token"
-              else
-                echo ""
-                echo "🔧 SAP BTP Unexpected Error (HTTP $sap_token_http_code):"
-                echo "   Check network connectivity and SAP BTP service status"
-              fi
-              
-              echo "sap_status=failed" >> $GITHUB_OUTPUT
-              echo "sap_message=Authentication failed (HTTP $sap_token_http_code)" >> $GITHUB_OUTPUT
-            fi
-          else
-            echo "⚠️ SAP BTP Document Management not configured"
-            echo "ℹ️ To enable SAP BTP uploads, set these organization variables:"
-            echo "   - DIAGRAMS_SAP_BTP_TOKEN_URL (OAuth2 token endpoint)"
-            echo "   - DIAGRAMS_SAP_BTP_CLIENT_ID (OAuth2 client ID)"
-            echo "   - DIAGRAMS_SAP_BTP_DM_BASE_URL (Document Management API base URL)"
-            echo "   - DIAGRAMS_SAP_BTP_REPOSITORY_ID (Optional: specific repository ID)"
-            echo "   And this secret:"
-            echo "   - DIAGRAMS_SAP_BTP_CLIENT_SECRET (OAuth2 client secret)"
-            echo "sap_status=not_configured" >> $GITHUB_OUTPUT
-            echo "sap_message=SAP BTP not configured" >> $GITHUB_OUTPUT
-          fi
+      # SAP BTP upload temporarily disabled to prevent workflow failures
 
   notify:
     needs: process
@@ -1153,7 +772,7 @@ jobs:
       - name: Send Teams Notification
         continue-on-error: true
         run: |
-          echo "🔔 Preparing Teams notification..."
+          echo "� Preparing Teams notification..."
           
           if [[ "${{ needs.process.result }}" == "success" ]]; then
             status="✅ Success"
@@ -1223,7 +842,7 @@ jobs:
               
               diagram_display_name="📊 $description ($tech_name, $detail_name)"
             else
-              diagram_display_name="📊 $diagram_name"
+              diagram_display_name="� $diagram_name"
             fi
           fi
           
@@ -1242,14 +861,14 @@ jobs:
           echo "🔍 Variable status: $(if [[ -n "${{ vars.DIAGRAMS_TEAMS_NOTIFICATION_WEBHOOK }}" ]]; then echo "Set"; else echo "Not set"; fi)"
           
           if [[ -n "$teams_webhook" ]]; then
-            echo "📤 Sending Teams notification..."
+            echo "� Sending Teams notification..."
             echo "🔍 Teams webhook URL starts with: $(echo "$teams_webhook" | head -c 50)..."
             
             # Create JSON payload with proper escaping
             echo "🔍 Sending payload to Teams..."
             
             # Simplified title
-            simple_title="📊 Draw.io Processing Complete"
+            simple_title="� Draw.io Processing Complete"
             
             # Build summary text
             if [[ "$processed" != "0" && "$failed" == "0" ]]; then
@@ -1279,7 +898,7 @@ jobs:
                 \"sections\": [{
                   \"activityTitle\": \"📋 Processing Details\",
                   \"facts\": [
-                    {\"name\": \"👤 Author\", \"value\": \"$escaped_author_info\"},
+                    {\"name\": \"� Author\", \"value\": \"$escaped_author_info\"},
                     {\"name\": \"📝 Commit\", \"value\": \"$commit_hash\"},
                     {\"name\": \"💬 Message\", \"value\": \"$escaped_commit_message\"},
                     {\"name\": \"📊 Diagram\", \"value\": \"$escaped_diagram_display_name\"},
@@ -1290,7 +909,7 @@ jobs:
                 }],
                 \"potentialAction\": [{
                   \"@type\": \"OpenUri\",
-                  \"name\": \"🔍 View Details\",
+                  \"name\": \"� View Details\",
                   \"targets\": [{
                     \"os\": \"default\",
                     \"uri\": \"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"
@@ -1321,7 +940,7 @@ jobs:
               
               # Try simplified payload as fallback
               echo "🔍 Trying simplified Teams payload..."
-              simple_payload="{\"text\":\"📊 Draw.io Processing $status - $processed files processed, $failed failed (Run #${{ github.run_number }})\"}"
+              simple_payload="{\"text\":\"� Draw.io Processing $status - $processed files processed, $failed failed (Run #${{ github.run_number }})\"}"
               
               simple_response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X POST "$teams_webhook" \
                 -H "Content-Type: application/json" \
