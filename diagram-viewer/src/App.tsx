@@ -5,7 +5,7 @@ import { Diagram, DiagramTopic } from '@/types/diagram';
 import { TopicSection } from '@/components/TopicSection';
 import { DiagramModal } from '@/components/DiagramModal';
 import { forceRefresh } from '@/utils/cacheManager';
-import { Search, Folder, RefreshCw } from 'lucide-react';
+import { Search, Folder, RefreshCw, Plus } from 'lucide-react';
 
 function App() {
   const [selectedDiagram, setSelectedDiagram] = useState<Diagram | null>(null);
@@ -47,6 +47,11 @@ function App() {
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setSelectedDiagram(null);
+  };
+
+  const handleRequestDiagram = () => {
+    const sbpaUrl = 'https://frosta-apps-dev.eu10.process-automation.build.cloud.sap/comsapspaprocessautomation.comsapspabpiprocessformtrigger/index.html?environmentId=frosta&projectId=eu10.frosta-apps-dev.newdiagramrequest&triggerId=diagramChangeRequest';
+    window.open(sbpaUrl, '_blank');
   };
 
   if (isLoading) {
@@ -91,6 +96,16 @@ function App() {
             </div>
 
             <div className="flex items-center gap-4">
+              {/* Request Diagram Button */}
+              <button
+                onClick={handleRequestDiagram}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-sap-blue text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-sap-blue focus:ring-offset-2"
+                title="Request new diagram or changes to existing diagrams"
+              >
+                <Plus className="w-4 h-4" />
+                Request Diagram
+              </button>
+
               {/* Refresh Button */}
               <button
                 onClick={handleRefresh}

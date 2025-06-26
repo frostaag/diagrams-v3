@@ -32,3 +32,6 @@ node_modules/
 # Optional: Ignore PNG files if you only want to track source .drawio files
 # png_files/*.png
 # png_files/CHANGELOG.csv
+
+# Disabled SAP BTP files
+disabled-sap-btp-files/
