@@ -99,11 +99,14 @@ function App() {
               {/* Request Diagram Button */}
               <button
                 onClick={handleRequestDiagram}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-sap-blue text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-sap-blue focus:ring-offset-2"
+                className="group relative inline-flex items-center gap-3 px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white text-sm font-semibold rounded-xl shadow-lg hover:shadow-xl hover:from-blue-700 hover:to-blue-800 transform hover:scale-105 transition-all duration-200 focus:outline-none focus:ring-4 focus:ring-blue-300 focus:ring-opacity-50 border border-blue-500"
                 title="Request new diagram or changes to existing diagrams"
               >
-                <Plus className="w-4 h-4" />
-                Request Diagram
+                <div className="flex items-center justify-center w-5 h-5 bg-white bg-opacity-20 rounded-full group-hover:bg-opacity-30 transition-all duration-200">
+                  <Plus className="w-3 h-3" />
+                </div>
+                <span className="font-medium">Request Diagram</span>
+                <div className="absolute inset-0 rounded-xl bg-white opacity-0 group-hover:opacity-10 transition-opacity duration-200"></div>
               </button>
 
               {/* Refresh Button */}
