@@ -99,14 +99,15 @@ function App() {
               {/* Request Diagram Button */}
               <button
                 onClick={handleRequestDiagram}
-                className="group relative inline-flex items-center gap-3 px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white text-sm font-semibold rounded-xl shadow-lg hover:shadow-xl hover:from-blue-700 hover:to-blue-800 transform hover:scale-105 transition-all duration-200 focus:outline-none focus:ring-4 focus:ring-blue-300 focus:ring-opacity-50 border border-blue-500"
+                className="group relative inline-flex items-center gap-4 px-8 py-4 min-w-[200px] bg-gradient-to-r from-blue-500 via-blue-600 to-blue-700 text-white text-base font-bold rounded-2xl shadow-xl hover:shadow-2xl hover:from-blue-600 hover:via-blue-700 hover:to-blue-800 transform hover:scale-[1.02] transition-all duration-300 focus:outline-none focus:ring-4 focus:ring-blue-300 focus:ring-opacity-50 border-2 border-blue-400 hover:border-blue-300"
                 title="Request new diagram or changes to existing diagrams"
               >
-                <div className="flex items-center justify-center w-5 h-5 bg-white bg-opacity-20 rounded-full group-hover:bg-opacity-30 transition-all duration-200">
-                  <Plus className="w-3 h-3" />
+                <div className="flex items-center justify-center w-7 h-7 bg-white bg-opacity-25 rounded-full group-hover:bg-opacity-40 transition-all duration-300 shadow-inner">
+                  <Plus className="w-4 h-4 font-bold" />
                 </div>
-                <span className="font-medium">Request Diagram</span>
-                <div className="absolute inset-0 rounded-xl bg-white opacity-0 group-hover:opacity-10 transition-opacity duration-200"></div>
+                <span className="font-bold text-white tracking-wide">Request Diagram</span>
+                <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-white to-transparent opacity-0 group-hover:opacity-20 transition-opacity duration-300"></div>
+                <div className="absolute inset-0 rounded-2xl bg-white opacity-0 group-active:opacity-30 transition-opacity duration-100"></div>
               </button>
 
               {/* Refresh Button */}
