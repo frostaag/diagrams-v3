@@ -105,7 +105,7 @@ function App() {
                 <div className="flex items-center justify-center w-5 h-5 bg-white bg-opacity-25 rounded-full group-hover:bg-opacity-40 transition-all duration-200">
                   <Plus className="w-3 h-3" />
                 </div>
-                <span className="font-semibold text-white">Request Diagram</span>
+                <span className="font-semibold text-white">New Diagram Request</span>
                 <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-white to-transparent opacity-0 group-hover:opacity-15 transition-opacity duration-200"></div>
               </button>
 
