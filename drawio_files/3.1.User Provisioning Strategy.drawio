@@ -50,8 +50,8 @@
             <mxPoint x="2175" y="2387.5" as="sourcePoint" />
             <mxPoint x="2174.5" y="2469.5" as="targetPoint" />
             <Array as="points">
-              <mxPoint x="2260" y="2450" />
-              <mxPoint x="2188" y="2450" />
+              <mxPoint x="2260" y="2470" />
+              <mxPoint x="2188" y="2470" />
             </Array>
           </mxGeometry>
         </mxCell>
@@ -287,12 +287,6 @@
         </mxCell>
         <mxCell id="tgy0nz73BSU-PfA2Lzls-77" value="&lt;div&gt;&lt;font style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;&lt;b&gt;Cloud Identity Services&lt;/b&gt;&lt;/font&gt;&lt;/div&gt;" style="text;strokeColor=none;fillColor=none;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=16;" vertex="1" parent="1">
           <mxGeometry x="2168" y="2217.5" width="183" height="30" as="geometry" />
-        </mxCell>
-        <mxCell id="tgy0nz73BSU-PfA2Lzls-78" value="" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#0070F2;fillColor=#EBF8FF;arcSize=24;absoluteArcSize=1;imageWidth=64;imageHeight=64;strokeWidth=1.5;" vertex="1" parent="1">
-          <mxGeometry x="2840" y="1420" width="235" height="303" as="geometry" />
-        </mxCell>
-        <mxCell id="tgy0nz73BSU-PfA2Lzls-79" value="S/4HANA" style="image;image=img/lib/sap/SAP_Logo.svg;editableCssRules=.*;verticalLabelPosition=middle;labelBackgroundColor=none;verticalAlign=middle;imageAspect=0;labelPosition=right;align=left;fontSize=16;fontStyle=1;spacingLeft=0;fontColor=#002A86;spacing=0;" vertex="1" parent="1">
-          <mxGeometry x="2859.63" y="1440" width="47" height="24.14" as="geometry" />
         </mxCell>
         <mxCell id="tgy0nz73BSU-PfA2Lzls-80" value="" style="group" vertex="1" connectable="0" parent="1">
           <mxGeometry x="2045" y="1796.6399999999999" width="260" height="220" as="geometry" />
