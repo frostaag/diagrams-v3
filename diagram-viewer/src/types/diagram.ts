@@ -1,9 +1,32 @@
 export interface Diagram {
+  id?: string; // 3-digit ID (001, 002, etc.)
   filename: string;
   topic: DiagramTopic;
   level: DiagramLevel;
   description: string;
   path: string;
+  originalName?: string; // Name without ID prefix
+}
+
+export interface DiagramRegistry {
+  nextId: number;
+  version: string;
+  created: string;
+  lastUpdated: string;
+  mappings: { [id: string]: DiagramMapping };
+}
+
+export interface DiagramMapping {
+  id: string;
+  originalName: string;
+  currentDrawioFile: string;
+  currentPngFile: string;
+  title: string;
+  topic: number;
+  level: number;
+  created: string;
+  lastModified: string;
+  status: 'active' | 'inactive' | 'archived';
 }
 
 export enum DiagramTopic {

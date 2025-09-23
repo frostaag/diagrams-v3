@@ -28,9 +28,129 @@ jobs:
       - name: Setup Draw.io
         run: |
           sudo apt-get update
-          sudo apt-get install -y wget xvfb
+          sudo apt-get install -y wget xvfb jq
           wget -q "https://github.com/jgraph/drawio-desktop/releases/download/v${{ env.DRAWIO_VERSION }}/drawio-amd64-${{ env.DRAWIO_VERSION }}.deb"
           sudo apt-get install -y "./drawio-amd64-${{ env.DRAWIO_VERSION }}.deb"
+
+      - name: Auto-assign IDs to new diagrams
+        id: assign_ids
+        run: |
+          echo "🆔 Checking for diagrams without ID prefixes..."
+          
+          # Create diagram-registry.json if it doesn't exist
+          if [[ ! -f "diagram-registry.json" ]]; then
+            echo "📝 Creating initial diagram registry..."
+            cat > diagram-registry.json << 'EOF'
+          {
+            "nextId": 1,
+            "version": "1.0", 
+            "created": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+            "lastUpdated": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+            "mappings": {}
+          }
+          EOF
+          fi
+          
+          # Check for files without ID prefixes
+          unprocessed_count=0
+          if [[ -d "drawio_files" ]]; then
+            while IFS= read -r -d '' file; do
+              basename_file=$(basename "$file")
+              if [[ ! "$basename_file" =~ ^[0-9]{3}_ ]]; then
+                ((unprocessed_count++))
+              fi
+            done < <(find drawio_files -name "*.drawio" -type f -print0 2>/dev/null || true)
+          fi
+          
+          echo "📊 Found $unprocessed_count files without ID prefixes"
+          
+          if [[ $unprocessed_count -gt 0 ]]; then
+            echo "🚀 Starting automatic ID assignment..."
+            
+            # Get next ID from registry
+            next_id=$(jq -r '.nextId' diagram-registry.json)
+            current_id=$next_id
+            
+            echo "🆔 Starting from ID: $(printf "%03d" $current_id)"
+            
+            # Process each file without ID
+            while IFS= read -r -d '' file; do
+              basename_file=$(basename "$file")
+              
+              # Skip files that already have IDs
+              if [[ "$basename_file" =~ ^[0-9]{3}_ ]]; then
+                continue
+              fi
+              
+              id_padded=$(printf "%03d" $current_id)
+              new_file="${id_padded}_${basename_file}"
+              
+              echo "🔄 Assigning ID $id_padded to: $basename_file"
+              
+              # Rename drawio file
+              mv "drawio_files/$basename_file" "drawio_files/$new_file"
+              echo "✅ Renamed: $basename_file → $new_file"
+              
+              # Rename PNG file if it exists
+              png_file="${basename_file%.drawio}.png"
+              new_png_file="${id_padded}_${png_file}"
+              
+              if [[ -f "png_files/$png_file" ]]; then
+                mv "png_files/$png_file" "png_files/$new_png_file"
+                echo "✅ Renamed PNG: $png_file → $new_png_file"
+              fi
+              
+              # Extract metadata for registry
+              title=$(echo "$basename_file" | sed 's/\.drawio$//' | sed 's/^[0-9]\.[0-9]\.*//')
+              topic=$(echo "$basename_file" | sed 's/\..*$//')
+              level=$(echo "$basename_file" | sed 's/^[0-9]\.\([0-9]\)\..*$/\1/')
+              current_time=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+              
+              # Add mapping to registry
+              temp_registry=$(mktemp)
+              jq --arg id "$id_padded" \
+                 --arg orig_name "$basename_file" \
+                 --arg drawio_file "$new_file" \
+                 --arg png_file "$new_png_file" \
+                 --arg title "$title" \
+                 --arg topic "$topic" \
+                 --arg level "$level" \
+                 --arg current_time "$current_time" \
+                 '.mappings[$id] = {
+                   "id": $id,
+                   "originalName": $orig_name,
+                   "currentDrawioFile": $drawio_file,
+                   "currentPngFile": $png_file,
+                   "title": $title,
+                   "topic": ($topic | tonumber),
+                   "level": ($level | tonumber),
+                   "created": $current_time,
+                   "lastModified": $current_time,
+                   "status": "active"
+                 }' diagram-registry.json > "$temp_registry"
+              
+              mv "$temp_registry" diagram-registry.json
+              
+              ((current_id++))
+            done < <(find drawio_files -name "*.drawio" -type f -print0 2>/dev/null || true)
+            
+            # Update nextId in registry
+            temp_registry=$(mktemp)
+            jq --arg next_id "$current_id" \
+               --arg update_time "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+               '.nextId = ($next_id | tonumber) | .lastUpdated = $update_time' \
+               diagram-registry.json > "$temp_registry"
+            mv "$temp_registry" diagram-registry.json
+            
+            echo "🎉 ID assignment completed!"
+            echo "📊 Processed $unprocessed_count files"
+            echo "🆔 Next available ID: $(printf "%03d" $current_id)"
+            
+            echo "ids_assigned=$unprocessed_count" >> $GITHUB_OUTPUT
+          else
+            echo "✅ All files already have ID prefixes"
+            echo "ids_assigned=0" >> $GITHUB_OUTPUT
+          fi
 
       - name: Convert & Update Changelog
         id: convert
@@ -92,99 +212,60 @@ jobs:
             folder_was_recreated=true
           fi
           
-          # Get changed draw.io files - improved logic for only changed files
+          # Get changed draw.io files - simplified and more robust logic
           changed_files=""
           
-          # For push events, only process files that were actually changed in this commit
+          # For push events, detect changed files using a more reliable approach
           if [[ "${{ github.event_name }}" == "push" ]]; then
             echo "🔍 Debug: Push event detected, checking for changed files in this push..."
             echo "🔍 Debug: Event before SHA: '${{ github.event.before }}'"
             echo "🔍 Debug: Event after SHA: '${{ github.event.after }}'"
             
-            # Try multiple methods to get changed files
-            # Method 1: Use GitHub event before/after SHAs
+            # Primary method: Use GitHub event SHAs if available
             if [[ -n "${{ github.event.before }}" && -n "${{ github.event.after }}" && "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]]; then
-              echo "🔍 Debug: Using GitHub event SHAs..."
-              changed_files=$(git diff --name-only ${{ github.event.before }}..${{ github.event.after }} -- "drawio_files/**/*.drawio" 2>/dev/null || true)
-              echo "🔍 Debug: GitHub event diff found: '$changed_files'"
+              echo "🔍 Debug: Using GitHub event SHAs for reliable change detection..."
+              
+              # Get all changed files (including renames)
+              all_changed=$(git diff --name-status ${{ github.event.before }}..${{ github.event.after }} 2>/dev/null || true)
+              echo "🔍 Debug: All changes in push: '$all_changed'"
+              
+              # Extract drawio files that were added, modified, or renamed
+              changed_files=$(echo "$all_changed" | grep -E "^[AMR][0-9]*\s+.*drawio_files/.*\.drawio$" | awk '{print $NF}' | sort -u || true)
+              echo "🔍 Debug: Drawio files changed/added/renamed: '$changed_files'"
+              
+              # Also check for any renamed files (old -> new format)
+              renamed_files=$(echo "$all_changed" | grep -E "^R[0-9]*\s+.*\.drawio\s+drawio_files/.*\.drawio$" | awk '{print $NF}' | sort -u || true)
+              if [[ -n "$renamed_files" ]]; then
+                echo "🔍 Debug: Additional renamed drawio files: '$renamed_files'"
+                changed_files="$changed_files $renamed_files"
+              fi
             fi
             
-            # Method 2: Fallback to HEAD^ comparison
+            # Fallback method: Use HEAD comparison
             if [[ -z "$changed_files" ]] && git rev-parse --verify HEAD^ >/dev/null 2>&1; then
-              echo "🔍 Debug: Fallback - checking git diff HEAD^..HEAD..."
+              echo "🔍 Debug: Fallback to HEAD^ comparison..."
               changed_files=$(git diff --name-only HEAD^..HEAD -- "drawio_files/**/*.drawio" 2>/dev/null || true)
               echo "🔍 Debug: HEAD diff found: '$changed_files'"
             fi
             
-            # Method 3: Use git log to find files changed in last commit
+            # Last resort: Check current commit for any drawio files
             if [[ -z "$changed_files" ]]; then
-              echo "🔍 Debug: Using git log method..."
-              changed_files=$(git log -1 --name-only --pretty=format: -- "drawio_files/**/*.drawio" 2>/dev/null | grep -v '^$' || true)
-              echo "🔍 Debug: Git log found: '$changed_files'"
+              echo "🔍 Debug: Last resort - checking current commit for drawio files..."
+              changed_files=$(git show --name-only --pretty=format: HEAD 2>/dev/null | grep "drawio_files/.*\.drawio$" || true)
+              echo "🔍 Debug: Current commit drawio files: '$changed_files'"
             fi
             
-            # Method 4: Use git show to get files from current commit
-            if [[ -z "$changed_files" ]]; then
-              echo "🔍 Debug: Using git show method..."
-              changed_files=$(git show --name-only --pretty=format: HEAD -- "drawio_files/**/*.drawio" 2>/dev/null | grep -v '^$' || true)
-              echo "🔍 Debug: Git show found: '$changed_files'"
-            fi
-            
-            # Method 5: Check for files modified in the push using git log with range
-            if [[ -z "$changed_files" ]] && [[ -n "${{ github.event.before }}" && "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]]; then
-              echo "🔍 Debug: Using git log range method..."
-              changed_files=$(git log --name-only --pretty=format: ${{ github.event.before }}..${{ github.event.after }} -- "drawio_files/**/*.drawio" 2>/dev/null | grep -v '^$' | sort -u || true)
-              echo "🔍 Debug: Git log range found: '$changed_files'"
-            fi
-            
-            # Method 6: For new repositories or when all else fails, check if this is a new file addition
-            if [[ -z "$changed_files" ]]; then
-              echo "🔍 Debug: Checking for recently added files..."
-              # Get all drawio files and check their git status
-              all_drawio_files=$(find drawio_files -name "*.drawio" -type f 2>/dev/null || true)
-              echo "🔍 Debug: All drawio files found: '$all_drawio_files'"
-              
-              # Debug: Check what git log --name-status shows
-              echo "🔍 Debug: Git log name-status output:"
-              git log -1 --name-status --pretty=format: HEAD 2>/dev/null || echo "Command failed"
-              
-              for file in $all_drawio_files; do
-                echo "🔍 Debug: Checking if $file was added in last commit..."
-                # Check if file was added in the last commit
-                if git log -1 --name-status --pretty=format: HEAD 2>/dev/null | grep -q "^A[[:space:]]\\+${file}$"; then
-                  echo "🔍 Debug: File $file was added in last commit"
-                  changed_files="$changed_files $file"
-                elif git log -1 --name-status --pretty=format: HEAD 2>/dev/null | grep -q "^M[[:space:]]\\+${file}$"; then
-                  echo "🔍 Debug: File $file was modified in last commit"
-                  changed_files="$changed_files $file"
-                fi
-              done
-              changed_files=$(echo "$changed_files" | xargs -n1 2>/dev/null | sort -u | tr '\n' ' ' | sed 's/^ *//;s/ *$//' || true)
-              echo "🔍 Debug: Found added/modified files: '$changed_files'"
-            fi
-            
-            # Method 7: Last resort - check the actual git diff with the SHAs we have
-            if [[ -z "$changed_files" ]] && [[ -n "${{ github.event.before }}" && -n "${{ github.event.after }}" ]]; then
-              echo "🔍 Debug: Last resort - detailed SHA diff check..."
-              echo "🔍 Debug: Running: git diff --name-only ${{ github.event.before }} ${{ github.event.after }}"
-              all_changed=$(git diff --name-only ${{ github.event.before }} ${{ github.event.after }} 2>/dev/null || true)
-              echo "🔍 Debug: All changed files in commit: '$all_changed'"
-              
-              # Filter for drawio files
-              changed_files=$(echo "$all_changed" | grep "drawio_files/.*\.drawio$" || true)
-              echo "🔍 Debug: Filtered drawio files: '$changed_files'"
-            fi
-            
-            # Additional check: only process files that actually exist
+            # Ensure only existing files are processed
             if [[ -n "$changed_files" ]]; then
               existing_files=""
               while IFS= read -r file; do
+                [[ -z "$file" ]] && continue
                 if [[ -f "$file" ]]; then
                   existing_files="$existing_files"$'\n'"$file"
                 fi
               done <<< "$changed_files"
               changed_files=$(echo "$existing_files" | grep -v '^$' | sort -u | tr '\n' ' ' | sed 's/^ *//;s/ *$//')
-              echo "🔍 Debug: Filtered to existing files: '$changed_files'"
+              echo "🔍 Debug: Final list of existing changed files: '$changed_files'"
             fi
           fi
           
@@ -210,6 +291,33 @@ jobs:
               fi
             else
               echo "⚠️ drawio_files directory not found"
+            fi
+          fi
+          
+          # Emergency fallback: If no changes detected but we have drawio files newer than PNGs
+          if [[ -z "$changed_files" && "${{ github.event_name }}" == "push" ]]; then
+            echo "🔍 Debug: No changes detected, checking for outdated PNGs..."
+            
+            # Find drawio files that don't have corresponding PNGs or are newer
+            missing_or_outdated=""
+            if [[ -d "drawio_files" ]]; then
+              while IFS= read -r -d '' drawio_file; do
+                [[ -z "$drawio_file" ]] && continue
+                
+                basename_file=$(basename "$drawio_file" .drawio)
+                png_file="png_files/${basename_file}.png"
+                
+                # Check if PNG doesn't exist or is older than drawio
+                if [[ ! -f "$png_file" ]] || [[ "$drawio_file" -nt "$png_file" ]]; then
+                  missing_or_outdated="$missing_or_outdated $drawio_file"
+                  echo "🔍 Debug: Found outdated/missing PNG for: $drawio_file"
+                fi
+              done < <(find drawio_files -name "*.drawio" -type f -print0 2>/dev/null || true)
+            fi
+            
+            if [[ -n "$missing_or_outdated" ]]; then
+              changed_files=$(echo "$missing_or_outdated" | xargs -n1 | sort -u | tr '\n' ' ' | sed 's/^ *//;s/ *$//')
+              echo "🔍 Debug: Emergency fallback - processing outdated files: '$changed_files'"
             fi
           fi
           

@@ -34,7 +34,9 @@ function App() {
 
   const filteredDiagrams = diagrams.filter(diagram =>
     diagram.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    diagram.filename.toLowerCase().includes(searchTerm.toLowerCase())
+    diagram.filename.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (diagram.id && diagram.id.includes(searchTerm)) ||
+    (diagram.originalName && diagram.originalName.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   const groupedDiagrams = groupDiagramsByTopic(filteredDiagrams);

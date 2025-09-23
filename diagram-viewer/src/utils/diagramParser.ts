@@ -1,11 +1,24 @@
-import { Diagram, DiagramTopic, DiagramLevel } from '@/types/diagram';
+import { Diagram, DiagramTopic, DiagramLevel, DiagramRegistry } from '@/types/diagram';
 
 export function parseDiagramFilename(filename: string): Diagram | null {
   // Remove .png extension
   const nameWithoutExt = filename.replace('.png', '');
   
+  // Try to parse ID-prefixed format first: 001_x.y.description
+  let idMatch = nameWithoutExt.match(/^(\d{3})_(.+)$/);
+  let id: string | undefined;
+  let actualName: string;
+  
+  if (idMatch) {
+    id = idMatch[1];
+    actualName = idMatch[2];
+  } else {
+    // No ID prefix, use filename as-is
+    actualName = nameWithoutExt;
+  }
+  
   // Parse pattern: x.y.description or x.y. description
-  const match = nameWithoutExt.match(/^(\d)\.(\d)\.?\s*(.+)$/);
+  const match = actualName.match(/^(\d)\.(\d)\.?\s*(.+)$/);
   
   if (!match) {
     console.warn(`Could not parse diagram filename: ${filename}`);
@@ -25,12 +38,37 @@ export function parseDiagramFilename(filename: string): Diagram | null {
   // Add cache busting timestamp to image path
   const timestamp = new Date().getTime();
   return {
+    id,
     filename,
     topic,
     level,
     description: description.trim(),
-    path: `./png_files/${encodeURIComponent(filename)}?v=${timestamp}`
+    path: `./png_files/${encodeURIComponent(filename)}?v=${timestamp}`,
+    originalName: actualName
   };
+}
+
+export async function loadDiagramRegistry(): Promise<DiagramRegistry | null> {
+  try {
+    const timestamp = new Date().getTime();
+    const response = await fetch(`./diagram-registry.json?v=${timestamp}`, {
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      }
+    });
+    
+    if (!response.ok) {
+      console.warn('Could not load diagram registry');
+      return null;
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.warn('Error loading diagram registry:', error);
+    return null;
+  }
 }
 
 export async function getDiagramList(): Promise<Diagram[]> {
