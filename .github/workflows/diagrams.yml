@@ -40,12 +40,13 @@ jobs:
           # Create diagram-registry.json if it doesn't exist
           if [[ ! -f "diagram-registry.json" ]]; then
             echo "📝 Creating initial diagram registry..."
-            cat > diagram-registry.json << 'EOF'
+            current_time=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+            cat > diagram-registry.json << EOF
           {
             "nextId": 1,
             "version": "1.0", 
-            "created": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
-            "lastUpdated": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+            "created": "$current_time",
+            "lastUpdated": "$current_time",
             "mappings": {}
           }
           EOF
