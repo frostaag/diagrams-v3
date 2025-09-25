@@ -226,22 +226,16 @@ jobs:
             if [[ -n "${{ github.event.before }}" && -n "${{ github.event.after }}" && "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]]; then
               echo "🔍 Debug: Using GitHub event SHAs for reliable change detection..."
               
-              # Get all changed files (including renames)
-              all_changed=$(git diff --name-status ${{ github.event.before }}..${{ github.event.after }} 2>/dev/null || true)
-              echo "🔍 Debug: All changes in push: '$all_changed'"
-              
-              # Extract drawio files that were added, modified, or renamed
-              changed_files=$(echo "$all_changed" | grep -E "^[AMR][0-9]*\s+.*drawio_files/.*\.drawio$" | awk '{print $NF}' | sort -u || true)
-              echo "🔍 Debug: Drawio files changed/added/renamed: '$changed_files'"
-              
-              # Also check for any renamed files (old -> new format)
-              renamed_files=$(echo "$all_changed" | grep -E "^R[0-9]*\s+.*\.drawio\s+drawio_files/.*\.drawio$" | awk '{print $NF}' | sort -u || true)
-              if [[ -n "$renamed_files" ]]; then
-                echo "🔍 Debug: Additional renamed drawio files:"
-                echo "$renamed_files"
-                # Preserve newline-delimited format to safely handle spaces in filenames
-                changed_files=$(printf "%s\n%s" "$changed_files" "$renamed_files" | grep -v '^$' | sort -u)
-              fi
+              # Get changed files robustly (NUL-delimited), including renames; safe for spaces in filenames
+              mapfile -d '' diff_paths &lt; &lt;(git diff --name-only --diff-filter=AMR -z ${{ github.event.before }}..${{ github.event.after }} 2>/dev/null || true)
+              changed_files=""
+              for p in "${diff_paths[@]}"; do
+                if [[ "$p" =~ ^drawio_files/.*\.drawio$ ]]; then
+                  changed_files+="$p"$'\n'
+                fi
+              done
+              echo "🔍 Debug: Drawio files changed/added/renamed (newline-delimited):"
+              echo "$changed_files"
             fi
             
             # Fallback method: Use HEAD comparison
