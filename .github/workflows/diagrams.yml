@@ -28,7 +28,10 @@ jobs:
       - name: Setup Draw.io
         run: |
           sudo apt-get update
-          sudo apt-get install -y wget xvfb jq
+          # Install dependencies required by Electron-based Draw.io
+          sudo apt-get install -y wget xvfb jq \
+            libgtk-3-0 libnss3 libxss1 libxtst6 libxrandr2 libasound2 libgbm1
+          # Install Draw.io desktop .deb
           wget -q "https://github.com/jgraph/drawio-desktop/releases/download/v${{ env.DRAWIO_VERSION }}/drawio-amd64-${{ env.DRAWIO_VERSION }}.deb"
           sudo apt-get install -y "./drawio-amd64-${{ env.DRAWIO_VERSION }}.deb"
 
