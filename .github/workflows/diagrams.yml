@@ -287,6 +287,15 @@ jobs:
               [[ -z "$file" ]] && continue
               if [[ -f "$file" ]]; then
                 existing_files="$existing_files"$'\n'"$file"
+              else
+                base="$(basename "$file")"
+                renamed="$(find drawio_files -type f -name "*_${base}" -print -quit 2>/dev/null || true)"
+                if [[ -n "$renamed" && -f "$renamed" ]]; then
+                  echo "🔍 Debug: Mapped renamed file: $file -> $renamed"
+                  existing_files="$existing_files"$'\n'"$renamed"
+                else
+                  echo "🔍 Debug: Skipping non-existent path (no rename match): $file"
+                fi
               fi
             done <<< "$changed_files"
             # Keep newline-delimited list to safely iterate filenames with spaces
@@ -336,7 +345,7 @@ jobs:
                 
                 # Check if PNG doesn't exist or is older than drawio
                 if [[ ! -f "$png_file" ]] || [[ "$drawio_file" -nt "$png_file" ]]; then
-                  missing_or_outdated="$missing_or_outdated $drawio_file"
+                  missing_or_outdated="${missing_or_outdated}${drawio_file}"$'\n'
                   echo "🔍 Debug: Found outdated/missing PNG for: $drawio_file"
                 fi
               done < <(find drawio_files -name "*.drawio" -type f -print0 2>/dev/null || true)
@@ -344,7 +353,7 @@ jobs:
             
             if [[ -n "$missing_or_outdated" ]]; then
               # Keep newline-delimited list to safely iterate filenames with spaces
-              changed_files=$(echo "$missing_or_outdated" | xargs -n1 | sort -u)
+              changed_files=$(echo "$missing_or_outdated" | grep -v '^$' | sort -u)
               echo "🔍 Debug: Emergency fallback - processing outdated files (newline-delimited):"
               echo "$changed_files"
             fi
