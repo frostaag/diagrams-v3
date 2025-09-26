@@ -497,7 +497,7 @@ jobs:
               conversion_output=""
               # IMPORTANT: draw.io CLI expects an output DIRECTORY with -o, not a file path.
               # Export to png_files directory so the output name matches the source basename.
-              if conversion_output=$(xvfb-run --auto-servernum --server-args="-screen 0 1024x768x24" drawio --no-sandbox --disable-gpu -x -f png -s 2 -p 1 -o "$png_file" "$file" 2>&1); then
+              if conversion_output=$(xvfb-run --auto-servernum --server-args="-screen 0 1024x768x24" drawio --no-sandbox --disable-gpu -x -f png -s 2 -p 1 -o "png_files" "$file" 2>&1); then
                 conversion_success="true"
               else
                 conversion_success="false"
