@@ -28,8 +28,8 @@ jobs:
       - name: Setup Draw.io
         continue-on-error: true
         run: |
-          set -e
-          sudo apt-get update
+          set +e
+          sudo apt-get update || true
           # Install dependencies for AppImage + headless Electron
           sudo apt-get install -y wget xvfb jq xdg-utils fonts-liberation libcurl4 \
             libgtk-3-0 libnss3 libnspr4 libxss1 libxtst6 libxrandr2 libasound2 libgbm1 libnotify4 \
@@ -182,6 +182,7 @@ jobs:
 
       - name: Convert & Update Changelog
         id: convert
+        continue-on-error: true
         shell: bash
         run: |
           set +e  # Disable exit on error for the entire script
@@ -496,7 +497,7 @@ jobs:
               conversion_output=""
               # IMPORTANT: draw.io CLI expects an output DIRECTORY with -o, not a file path.
               # Export to png_files directory so the output name matches the source basename.
-              if conversion_output=$(xvfb-run --auto-servernum --server-args="-screen 0 1024x768x24" drawio --no-sandbox --disable-gpu -x -f png -s 2 -p 1 -o "png_files" "$file" 2>&1); then
+              if conversion_output=$(xvfb-run --auto-servernum --server-args="-screen 0 1024x768x24" drawio --no-sandbox --disable-gpu -x -f png -s 2 -p 1 -o "$png_file" "$file" 2>&1); then
                 conversion_success="true"
               else
                 conversion_success="false"
