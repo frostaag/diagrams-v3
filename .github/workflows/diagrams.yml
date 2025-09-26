@@ -29,18 +29,29 @@ jobs:
         run: |
           set -e
           sudo apt-get update
-          # Install dependencies required by Electron-based Draw.io (Ubuntu 22.04/24.04)
-          sudo apt-get install -y wget xvfb jq \
-            libgtk-3-0 libnss3 libnspr4 libxss1 libxtst6 libxrandr2 libasound2 libgbm1 libcurl4 \
-            libx11-xcb1 libxcomposite1 libxdamage1 libxshmfence1 \
-            libatk-bridge2.0-0 libatspi2.0-0 libdrm2 libpangocairo-1.0-0 libpango-1.0-0 \
-            libnotify4 libsecret-1-0 fonts-liberation
-          # Download and install Draw.io desktop .deb
-          wget -q "https://github.com/jgraph/drawio-desktop/releases/download/v${{ env.DRAWIO_VERSION }}/drawio-amd64-${{ env.DRAWIO_VERSION }}.deb"
-          # Try install and auto-fix missing dependencies if required
-          sudo apt-get install -y "./drawio-amd64-${{ env.DRAWIO_VERSION }}.deb" || (sudo apt-get -f install -y && sudo apt-get install -y "./drawio-amd64-${{ env.DRAWIO_VERSION }}.deb")
-          # Sanity check that drawio is available and runnable under Xvfb
-          command -v drawio >/dev/null || echo "⚠️ drawio not found in PATH; proceeding (conversion may skip if binary missing)"
+          # Install dependencies for AppImage + headless Electron
+          sudo apt-get install -y wget xvfb jq xdg-utils fonts-liberation libcurl4 \
+            libgtk-3-0 libnss3 libnspr4 libxss1 libxtst6 libxrandr2 libasound2 libgbm1 libnotify4 \
+            libx11-xcb1 libxcomposite1 libxdamage1 libxshmfence1 libatk-bridge2.0-0 libatspi2.0-0 libdrm2 libpangocairo-1.0-0 libpango-1.0-0 \
+            libayatana-appindicator1 || true
+          # AppImage requires FUSE 2 on Ubuntu; try both package names depending on runner image
+          sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64
+          # Download draw.io AppImage
+          APPIMAGE="drawio-x86_64-${{ env.DRAWIO_VERSION }}.AppImage"
+          wget -q "https://github.com/jgraph/drawio-desktop/releases/download/v${{ env.DRAWIO_VERSION }}/${APPIMAGE}"
+          chmod +x "$APPIMAGE"
+          # Provide a drawio wrapper so existing commands keep working
+          sudo tee /usr/local/bin/drawio >/dev/null <<'EOS'
+          #!/usr/bin/env bash
+          set -e
+          APPIMAGE="./drawio-x86_64-${DRAWIO_VERSION}.AppImage"
+          if [[ ! -x "$APPIMAGE" ]]; then
+            APPIMAGE="$(pwd)/drawio-x86_64-${DRAWIO_VERSION}.AppImage"
+          fi
+          exec "$APPIMAGE" "$@"
+          EOS
+          sudo chmod +x /usr/local/bin/drawio
+          # Sanity check
           xvfb-run --auto-servernum --server-args="-screen 0 1024x768x24" drawio --version || true
 
       - name: Auto-assign IDs to new diagrams
