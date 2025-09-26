@@ -36,19 +36,18 @@ jobs:
             libayatana-appindicator1 || true
           # AppImage requires FUSE 2 on Ubuntu; try both package names depending on runner image
           sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64
-          # Download draw.io AppImage
+          # Download draw.io AppImage to a fixed location
           APPIMAGE="drawio-x86_64-${{ env.DRAWIO_VERSION }}.AppImage"
-          wget -q "https://github.com/jgraph/drawio-desktop/releases/download/v${{ env.DRAWIO_VERSION }}/${APPIMAGE}"
-          chmod +x "$APPIMAGE"
-          # Provide a drawio wrapper so existing commands keep working
+          sudo mkdir -p /opt/drawio
+          sudo wget -q -O "/opt/drawio/${APPIMAGE}" "https://github.com/jgraph/drawio-desktop/releases/download/v${{ env.DRAWIO_VERSION }}/${APPIMAGE}"
+          sudo chmod +x "/opt/drawio/${APPIMAGE}"
+          # Provide a drawio wrapper so existing commands keep working (avoid FUSE via extract-and-run)
           sudo tee /usr/local/bin/drawio >/dev/null <<'EOS'
           #!/usr/bin/env bash
           set -e
-          APPIMAGE="./drawio-x86_64-${DRAWIO_VERSION}.AppImage"
-          if [[ ! -x "$APPIMAGE" ]]; then
-            APPIMAGE="$(pwd)/drawio-x86_64-${DRAWIO_VERSION}.AppImage"
-          fi
-          exec "$APPIMAGE" "$@"
+          export APPIMAGE_EXTRACT_AND_RUN=1
+          APP="/opt/drawio/drawio-x86_64-${DRAWIO_VERSION}.AppImage"
+          exec "$APP" "$@"
           EOS
           sudo chmod +x /usr/local/bin/drawio
           # Sanity check
