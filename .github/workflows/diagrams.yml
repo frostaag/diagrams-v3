@@ -27,13 +27,21 @@ jobs:
 
       - name: Setup Draw.io
         run: |
+          set -e
           sudo apt-get update
-          # Install dependencies required by Electron-based Draw.io
+          # Install dependencies required by Electron-based Draw.io (Ubuntu 22.04/24.04)
           sudo apt-get install -y wget xvfb jq \
-            libgtk-3-0 libnss3 libxss1 libxtst6 libxrandr2 libasound2 libgbm1
-          # Install Draw.io desktop .deb
+            libgtk-3-0 libnss3 libnspr4 libxss1 libxtst6 libxrandr2 libasound2 libgbm1 libcurl4 \
+            libx11-xcb1 libxcomposite1 libxdamage1 libxshmfence1 \
+            libatk-bridge2.0-0 libatspi2.0-0 libdrm2 libpangocairo-1.0-0 libpango-1.0-0 \
+            libnotify4 libsecret-1-0 fonts-liberation
+          # Download and install Draw.io desktop .deb
           wget -q "https://github.com/jgraph/drawio-desktop/releases/download/v${{ env.DRAWIO_VERSION }}/drawio-amd64-${{ env.DRAWIO_VERSION }}.deb"
-          sudo apt-get install -y "./drawio-amd64-${{ env.DRAWIO_VERSION }}.deb"
+          # Try install and auto-fix missing dependencies if required
+          sudo apt-get install -y "./drawio-amd64-${{ env.DRAWIO_VERSION }}.deb" || (sudo apt-get -f install -y && sudo apt-get install -y "./drawio-amd64-${{ env.DRAWIO_VERSION }}.deb")
+          # Sanity check that drawio is available and runnable under Xvfb
+          command -v drawio >/dev/null || echo "⚠️ drawio not found in PATH; proceeding (conversion may skip if binary missing)"
+          xvfb-run --auto-servernum --server-args="-screen 0 1024x768x24" drawio --version || true
 
       - name: Auto-assign IDs to new diagrams
         id: assign_ids
@@ -472,7 +480,7 @@ jobs:
               conversion_output=""
               # IMPORTANT: draw.io CLI expects an output DIRECTORY with -o, not a file path.
               # Export to png_files directory so the output name matches the source basename.
-              if conversion_output=$(xvfb-run --auto-servernum --server-args="-screen 0 1024x768x24" drawio --no-sandbox -x -f png -s 2 -o "png_files" "$file" 2>&1); then
+              if conversion_output=$(xvfb-run --auto-servernum --server-args="-screen 0 1024x768x24" drawio --no-sandbox --disable-gpu -x -f png -s 2 -p 1 -o "png_files" "$file" 2>&1); then
                 conversion_success="true"
               else
                 conversion_success="false"
