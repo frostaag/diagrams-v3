@@ -37,6 +37,10 @@ jobs:
             libayatana-appindicator1 || true
           # AppImage requires FUSE 2 on Ubuntu; try both package names depending on runner image
           sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64
+          # Ensure jq is available for subsequent steps (used in Auto-assign step)
+          if ! command -v jq >/dev/null 2>&1; then
+            sudo apt-get install -y jq || true
+          fi
           # Download draw.io AppImage to a fixed location
           APPIMAGE="drawio-x86_64-${{ env.DRAWIO_VERSION }}.AppImage"
           sudo mkdir -p /opt/drawio
@@ -56,6 +60,7 @@ jobs:
 
       - name: Auto-assign IDs to new diagrams
         id: assign_ids
+        continue-on-error: true
         run: |
           echo "🆔 Checking for diagrams without ID prefixes..."
           
