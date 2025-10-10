@@ -25,38 +25,224 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Draw.io
-        continue-on-error: true
+      - name: Setup Node.js and Puppeteer for Draw.io Conversion
         run: |
-          set +e
-          sudo apt-get update || true
-          # Install dependencies for AppImage + headless Electron
-          sudo apt-get install -y wget xvfb jq xdg-utils fonts-liberation libcurl4 \
-            libgtk-3-0 libnss3 libnspr4 libxss1 libxtst6 libxrandr2 libasound2 libgbm1 libnotify4 \
-            libx11-xcb1 libxcomposite1 libxdamage1 libxshmfence1 libatk-bridge2.0-0 libatspi2.0-0 libdrm2 libpangocairo-1.0-0 libpango-1.0-0 \
-            libayatana-appindicator1 || true
-          # AppImage requires FUSE 2 on Ubuntu; try both package names depending on runner image
-          sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64
-          # Ensure jq is available for subsequent steps (used in Auto-assign step)
-          if ! command -v jq >/dev/null 2>&1; then
-            sudo apt-get install -y jq || true
-          fi
-          # Download draw.io AppImage to a fixed location
-          APPIMAGE="drawio-x86_64-${{ env.DRAWIO_VERSION }}.AppImage"
-          sudo mkdir -p /opt/drawio
-          sudo wget -q -O "/opt/drawio/${APPIMAGE}" "https://github.com/jgraph/drawio-desktop/releases/download/v${{ env.DRAWIO_VERSION }}/${APPIMAGE}"
-          sudo chmod +x "/opt/drawio/${APPIMAGE}"
-          # Provide a drawio wrapper so existing commands keep working (avoid FUSE via extract-and-run)
-          sudo tee /usr/local/bin/drawio >/dev/null <<'EOS'
-          #!/usr/bin/env bash
-          set -e
-          export APPIMAGE_EXTRACT_AND_RUN=1
-          APP="/opt/drawio/drawio-x86_64-${DRAWIO_VERSION}.AppImage"
-          exec "$APP" "$@"
-          EOS
-          sudo chmod +x /usr/local/bin/drawio
-          # Sanity check
-          xvfb-run --auto-servernum --server-args="-screen 0 1024x768x24" drawio --version || true
+          echo "🔧 Setting up Node.js and Puppeteer for reliable draw.io conversion..."
+          
+          # Install Node.js (latest LTS)
+          curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
+          sudo apt-get install -y nodejs
+          
+          # Install jq for JSON processing
+          sudo apt-get install -y jq
+          
+          # Create package.json for Puppeteer
+          cat > package.json << 'EOF'
+          {
+            "name": "drawio-converter",
+            "version": "1.0.0",
+            "dependencies": {
+              "puppeteer": "^21.0.0"
+            }
+          }
+          EOF
+          
+          # Install Puppeteer
+          npm install
+          
+          # Create draw.io conversion script
+          cat > convert-drawio.js << 'EOF'
+          const puppeteer = require('puppeteer');
+          const fs = require('fs');
+          const path = require('path');
+          
+          async function convertDrawioToPng(inputFile, outputFile) {
+            console.log(`🔄 Converting ${inputFile} to ${outputFile}`);
+            
+            let browser;
+            try {
+              // Launch browser
+              browser = await puppeteer.launch({
+                headless: 'new',
+                args: [
+                  '--no-sandbox',
+                  '--disable-setuid-sandbox',
+                  '--disable-dev-shm-usage',
+                  '--disable-accelerated-2d-canvas',
+                  '--no-first-run',
+                  '--no-zygote',
+                  '--disable-gpu'
+                ]
+              });
+              
+              const page = await browser.newPage();
+              await page.setViewport({ width: 1200, height: 800 });
+              
+              // Read the .drawio file
+              const drawioContent = fs.readFileSync(inputFile, 'utf8');
+              console.log(`📄 Read ${drawioContent.length} characters from ${inputFile}`);
+              
+              // Navigate to draw.io
+              console.log('🌐 Loading draw.io web application...');
+              await page.goto('https://app.diagrams.net/', { 
+                waitUntil: 'networkidle2',
+                timeout: 30000 
+              });
+              
+              // Wait for the app to load and handle the splash screen
+              await page.waitForTimeout(3000);
+              
+              // Try to close any splash screens or dialogs
+              try {
+                await page.click('button[data-dialog-action-function="close"]', { timeout: 2000 });
+              } catch (e) {
+                console.log('No splash screen to close');
+              }
+              
+              try {
+                await page.click('.geDialogClose', { timeout: 2000 });
+              } catch (e) {
+                console.log('No dialog to close');
+              }
+              
+              // Import the .drawio content
+              console.log('📥 Importing drawio content...');
+              await page.evaluate((content) => {
+                // Find the editor frame
+                const editorFrame = window.frames[0];
+                if (editorFrame && editorFrame.EditorUi) {
+                  try {
+                    // Parse and import the diagram
+                    const ui = editorFrame.EditorUi.prototype;
+                    const editor = editorFrame.editor;
+                    
+                    // Import the XML content
+                    const doc = editor.graph.parseXml(content);
+                    const diagrams = doc.getElementsByTagName('diagram');
+                    
+                    if (diagrams.length > 0) {
+                      const diagramContent = diagrams[0].textContent || diagrams[0].innerHTML;
+                      const decoded = window.atob ? window.atob(diagramContent) : diagramContent;
+                      const decompressed = editorFrame.pako ? editorFrame.pako.inflateRaw(decoded, {to: 'string'}) : decoded;
+                      
+                      // Create new graph model from the content
+                      const xmlDoc = editor.graph.parseXml(decompressed);
+                      editor.graph.getModel().setRoot(editor.graph.getModel().importCellsWith(
+                        xmlDoc.documentElement.getElementsByTagName('root')[0].childNodes,
+                        null,
+                        null
+                      ));
+                      
+                      console.log('✅ Successfully imported diagram');
+                      return true;
+                    }
+                  } catch (error) {
+                    console.error('Import error:', error);
+                    return false;
+                  }
+                }
+                return false;
+              }, drawioContent);
+              
+              await page.waitForTimeout(2000);
+              
+              // Export as PNG
+              console.log('🖼️ Exporting as PNG...');
+              
+              // Try to find and click File menu
+              await page.evaluate(() => {
+                // Try multiple ways to trigger export
+                const fileMenu = document.querySelector('[title="File"]') || 
+                               document.querySelector('.geMenuItem:contains("File")') ||
+                               document.querySelector('div[role="menuitem"]:contains("File")');
+                
+                if (fileMenu) {
+                  fileMenu.click();
+                  return true;
+                }
+                
+                // Fallback: try keyboard shortcut
+                const event = new KeyboardEvent('keydown', {
+                  key: 'e',
+                  ctrlKey: true,
+                  shiftKey: true
+                });
+                document.dispatchEvent(event);
+                return false;
+              });
+              
+              await page.waitForTimeout(2000);
+              
+              // Alternative approach: Use the export API directly
+              const pngBuffer = await page.evaluate(async (content) => {
+                try {
+                  // Direct API call to diagrams.net export
+                  const response = await fetch('https://convert.diagrams.net/export', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: new URLSearchParams({
+                      format: 'png',
+                      xml: content,
+                      scale: '2',
+                      border: '10'
+                    })
+                  });
+                  
+                  if (response.ok) {
+                    const arrayBuffer = await response.arrayBuffer();
+                    return Array.from(new Uint8Array(arrayBuffer));
+                  }
+                  return null;
+                } catch (error) {
+                  console.error('Export API error:', error);
+                  return null;
+                }
+              }, drawioContent);
+              
+              if (pngBuffer && pngBuffer.length > 0) {
+                fs.writeFileSync(outputFile, Buffer.from(pngBuffer));
+                console.log(`✅ Successfully exported PNG to ${outputFile} (${pngBuffer.length} bytes)`);
+                return true;
+              } else {
+                console.error('❌ Failed to export PNG - empty buffer');
+                return false;
+              }
+              
+            } catch (error) {
+              console.error(`❌ Conversion failed: ${error.message}`);
+              return false;
+            } finally {
+              if (browser) {
+                await browser.close();
+              }
+            }
+          }
+          
+          // Main execution
+          async function main() {
+            const args = process.argv.slice(2);
+            if (args.length !== 2) {
+              console.error('Usage: node convert-drawio.js <input.drawio> <output.png>');
+              process.exit(1);
+            }
+            
+            const [inputFile, outputFile] = args;
+            
+            if (!fs.existsSync(inputFile)) {
+              console.error(`Input file not found: ${inputFile}`);
+              process.exit(1);
+            }
+            
+            const success = await convertDrawioToPng(inputFile, outputFile);
+            process.exit(success ? 0 : 1);
+          }
+          
+          main().catch(console.error);
+          EOF
+          
+          echo "✅ Puppeteer conversion setup complete"
 
       - name: Auto-assign IDs to new diagrams
         id: assign_ids
@@ -499,79 +685,26 @@ jobs:
               action="Failed - Source Not Found"
               ((failed_count++))
             else
-              # Convert to PNG with better error handling
-              echo "🎨 Running draw.io conversion..."
+              # Convert to PNG using Puppeteer-based solution
+              echo "🎨 Running Puppeteer-based draw.io conversion..."
               
-              # Run draw.io conversion and capture output
-              conversion_output=""
-              # IMPORTANT: draw.io CLI expects an output DIRECTORY with -o, not a file path.
-              # Export to png_files directory so the output name matches the source basename.
-              if conversion_output=$(xvfb-run --auto-servernum --server-args="-screen 0 1024x768x24" drawio --no-sandbox --disable-gpu -x -f png -s 2 -p 1 -o "png_files" "$file" 2>&1); then
-                conversion_success="true"
-              else
-                conversion_success="false"
-              fi
-              
-              echo "🔍 Draw.io output: $conversion_output"
-              echo "🔍 Conversion success: $conversion_success"
-              
-              # Check if conversion was successful by verifying the output file
-              if [[ -f "$png_file" && -s "$png_file" ]]; then
-                file_size=$(stat -c%s "$png_file" 2>/dev/null || stat -f%z "$png_file" 2>/dev/null || echo "unknown")
-                echo "✅ Successfully converted $basename (${file_size} bytes)"
-                action="Converted to PNG"
-                ((processed_count++))
-              else
-                echo "❌ PNG conversion failed for: $basename"
-                echo "🔍 Debug: PNG file exists: $(test -f "$png_file" && echo "yes" || echo "no")"
-                echo "🔍 Debug: PNG file size: $(test -s "$png_file" && echo "non-zero" || echo "zero/missing")"
-                
-                # Secondary fallback: try diagrams.net web convert API
-                echo "🔍 Fallback: Trying diagrams.net convert API for '$basename'"
-                if curl -sS -X POST "https://convert.diagrams.net/export" \
-                  --data-urlencode "format=png" \
-                  --data-urlencode "xml=$(cat "$file")" \
-                  --data-urlencode "scale=2" \
-                  --data-urlencode "border=0" \
-                  --output "$png_file"; then
-                  if [[ -f "$png_file" && -s "$png_file" ]]; then
-                    file_size=$(stat -c%s "$png_file" 2>/dev/null || stat -f%z "$png_file" 2>/dev/null || echo "unknown")
-                    echo "✅ Web export succeeded for $basename (${file_size} bytes)"
-                    action="Converted to PNG (Web)"
-                    ((processed_count++))
-                  else
-                    echo "❌ Web export returned empty file"
-                  fi
+              # Run the Node.js conversion script
+              if node convert-drawio.js "$file" "$png_file"; then
+                # Check if conversion was successful by verifying the output file
+                if [[ -f "$png_file" && -s "$png_file" ]]; then
+                  file_size=$(stat -c%s "$png_file" 2>/dev/null || stat -f%z "$png_file" 2>/dev/null || echo "unknown")
+                  echo "✅ Successfully converted $basename (${file_size} bytes)"
+                  action="Converted to PNG"
+                  ((processed_count++))
                 else
-                  echo "❌ Web export failed"
+                  echo "❌ PNG file not created or empty"
+                  action="Failed - Empty Output"
+                  ((failed_count++))
                 fi
-
-                # Final fallback: generate a stub PNG to avoid workflow failure and keep viewer functional
-                # Prefer ImageMagick 'convert' if available, otherwise write a tiny placeholder
-                if [[ ! -f "$png_file" || ! -s "$png_file" ]]; then
-                  if command -v convert >/dev/null 2>&1; then
-                    echo "🔍 Fallback: Using ImageMagick to create stub PNG for '$basename'"
-                    convert -size 1200x800 xc:white -gravity NorthWest -pointsize 22 -fill black \
-                      -annotate +30+40 "Stub PNG generated by workflow" \
-                      -annotate +30+80 "Source: $file" \
-                      -annotate +30+120 "Reason: draw.io export failed on runner" \
-                      "$png_file" 2>/dev/null || true
-                  else
-                    echo "🔍 Fallback: ImageMagick not found, writing minimal placeholder file"
-                    echo "Stub PNG: draw.io export failed for '$basename' on runner" > "$png_file"
-                  fi
-
-                  if [[ -f "$png_file" && -s "$png_file" ]]; then
-                    file_size=$(stat -c%s "$png_file" 2>/dev/null || stat -f%z "$png_file" 2>/dev/null || echo "unknown")
-                    echo "✅ Stub PNG created (${file_size} bytes) to maintain pipeline continuity"
-                    action="Converted to PNG (Stub)"
-                    ((processed_count++))
-                  else
-                    echo "❌ Failed to create stub PNG"
-                    action="Failed - Conversion Error"
-                    ((failed_count++))
-                  fi
-                fi
+              else
+                echo "❌ Puppeteer conversion script failed"
+                action="Failed - Script Error"
+                ((failed_count++))
               fi
             fi
             
