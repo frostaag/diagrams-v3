@@ -83,3 +83,4 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./diagram-viewer/dist
           force_orphan: true
+          exclude_assets: '.github,docs,drawio_files,png_files,index.html'
