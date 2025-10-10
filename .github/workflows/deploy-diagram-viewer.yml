@@ -34,7 +34,14 @@ jobs:
         run: |
           echo "📁 Copying PNG files to diagram viewer..."
           mkdir -p diagram-viewer/public/png_files
-          cp -r png_files/*.png diagram-viewer/public/png_files/ 2>/dev/null || echo "No PNG files to copy"
+          if ls png_files/*.png 1> /dev/null 2>&1; then
+            cp png_files/*.png diagram-viewer/public/png_files/
+            echo "✅ Copied $(ls png_files/*.png | wc -l) PNG files"
+          else
+            echo "⚠️ No PNG files found to copy"
+          fi
+          echo "📁 PNG files in diagram viewer:"
+          ls -la diagram-viewer/public/png_files/ || echo "Directory empty or doesn't exist"
           
       - name: Update diagrams API
         working-directory: diagram-viewer
