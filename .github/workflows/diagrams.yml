@@ -660,7 +660,7 @@ jobs:
                 echo "🔍 Debug: Files to be committed:"
                 git diff --staged --name-only
                 
-                git commit -m "Create PNG files directory and changelog [skip ci]"
+                git commit -m "Generate PNG files and update changelog"
                 echo "✅ Committed successfully"
               fi
             else
@@ -673,7 +673,7 @@ jobs:
             echo "🔍 Debug: Files to be committed:"
             git diff --staged --name-only
             
-            git commit -m "Generate PNG files and update changelog [skip ci]"
+            git commit -m "Generate PNG files and update changelog"
             echo "✅ Committed successfully"
           fi
 

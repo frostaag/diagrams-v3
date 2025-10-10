@@ -52,35 +52,15 @@ jobs:
           const path = require('path');
           
           const pngDir = path.join(__dirname, 'public/png_files');
-          const diagrams = [];
+          let diagrams = [];
           
           if (fs.existsSync(pngDir)) {
             const files = fs.readdirSync(pngDir).filter(f => f.endsWith('.png'));
+            console.log('Found PNG files:', files);
             
-            files.forEach(filename => {
-              const parts = filename.replace('.png', '').split('.');
-              if (parts.length >= 3) {
-                const techId = parseInt(parts[0]) || 0;
-                const detailLevel = parseInt(parts[1]) || 1;
-                const description = parts.slice(2).join('.').trim();
-                
-                diagrams.push({
-                  id: filename.replace('.png', '').replace(/[^a-zA-Z0-9]/g, '_'),
-                  filename: filename,
-                  techId: techId,
-                  detailLevel: detailLevel,
-                  description: description,
-                  size: fs.statSync(path.join(pngDir, filename)).size
-                });
-              }
-            });
+            // Just return the filenames as expected by the diagram parser
+            diagrams = files;
           }
-          
-          diagrams.sort((a, b) => {
-            if (a.techId !== b.techId) return a.techId - b.techId;
-            if (a.detailLevel !== b.detailLevel) return a.detailLevel - b.detailLevel;
-            return a.description.localeCompare(b.description);
-          });
           
           const apiData = {
             lastUpdated: new Date().toISOString(),
@@ -90,6 +70,7 @@ jobs:
           
           fs.writeFileSync('public/api/diagrams.json', JSON.stringify(apiData, null, 2));
           console.log('✅ Updated API with', diagrams.length, 'diagram files');
+          console.log('API data:', JSON.stringify(apiData, null, 2));
           "
           
       - name: Build
