@@ -1,0 +1,140 @@
+{
+  "nextId": 23,
+  "version": "1.0",
+  "created": "2024-06-27T12:57:00Z",
+  "lastUpdated": "2024-06-27T12:57:00Z",
+  "mappings": {
+    "001": {
+      "id": "001",
+      "originalName": "0.1. Monitoring Proposed Strategy.drawio",
+      "currentDrawioFile": "001_0.1. Monitoring Proposed Strategy.drawio",
+      "currentPngFile": "001_0.1. Monitoring Proposed Strategy.png",
+      "title": "Monitoring Proposed Strategy",
+      "topic": 0,
+      "level": 1,
+      "created": "2024-01-01T00:00:00Z",
+      "lastModified": "2024-06-27T12:57:00Z",
+      "status": "active"
+    },
+    "002": {
+      "id": "002",
+      "originalName": "0.2. FRoSTA Azure.drawio",
+      "currentDrawioFile": "002_0.2. FRoSTA Azure.drawio", 
+      "currentPngFile": "002_0.2. FRoSTA Azure.png",
+      "title": "FRoSTA Azure",
+      "topic": 0,
+      "level": 2,
+      "created": "2024-01-02T00:00:00Z",
+      "lastModified": "2024-06-27T12:57:00Z",
+      "status": "active"
+    },
+    "003": {
+      "id": "003",
+      "originalName": "0.2. Seeburger Setup Over VPN.drawio",
+      "currentDrawioFile": "003_0.2. Seeburger Setup Over VPN.drawio",
+      "currentPngFile": "003_0.2. Seeburger Setup Over VPN.png", 
+      "title": "Seeburger Setup Over VPN",
+      "topic": 0,
+      "level": 2,
+      "created": "2024-01-03T00:00:00Z",
+      "lastModified": "2024-06-27T12:57:00Z",
+      "status": "active"
+    },
+    "004": {
+      "id": "004",
+      "originalName": "0.2.External User Identity Provision Idea.drawio",
+      "currentDrawioFile": "004_0.2.External User Identity Provision Idea.drawio",
+      "currentPngFile": "004_0.2.External User Identity Provision Idea.png",
+      "title": "External User Identity Provision Idea",
+      "topic": 0,
+      "level": 2,
+      "created": "2024-01-04T00:00:00Z",
+      "lastModified": "2024-06-27T12:57:00Z",
+      "status": "active"
+    },
+    "005": {
+      "id": "005",
+      "originalName": "3.1. SAP Task Center.drawio",
+      "currentDrawioFile": "005_3.1. SAP Task Center.drawio",
+      "currentPngFile": "005_3.1. SAP Task Center.png",
+      "title": "SAP Task Center",
+      "topic": 3,
+      "level": 1,
+      "created": "2024-01-05T00:00:00Z",
+      "lastModified": "2024-06-27T12:57:00Z",
+      "status": "active"
+    },
+    "006": {
+      "id": "006",
+      "originalName": "3.1.SAP BTP and Cloud.drawio",
+      "currentDrawioFile": "006_3.1.SAP BTP and Cloud.drawio",
+      "currentPngFile": "006_3.1.SAP BTP and Cloud.png",
+      "title": "SAP BTP and Cloud",
+      "topic": 3,
+      "level": 1,
+      "created": "2024-01-06T00:00:00Z",
+      "lastModified": "2024-06-27T12:57:00Z",
+      "status": "active"
+    },
+    "007": {
+      "id": "007",
+      "originalName": "3.1.SAP Cloud Simplified.drawio",
+      "currentDrawioFile": "007_3.1.SAP Cloud Simplified.drawio",
+      "currentPngFile": "007_3.1.SAP Cloud Simplified.png",
+      "title": "SAP Cloud Simplified",
+      "topic": 3,
+      "level": 1,
+      "created": "2024-01-07T00:00:00Z",
+      "lastModified": "2024-06-27T12:57:00Z",
+      "status": "active"
+    },
+    "008": {
+      "id": "008",
+      "originalName": "3.1.User Provisioning Strategy.drawio",
+      "currentDrawioFile": "008_3.1.User Provisioning Strategy.drawio",
+      "currentPngFile": "008_3.1.User Provisioning Strategy.png",
+      "title": "User Provisioning Strategy",
+      "topic": 3,
+      "level": 1,
+      "created": "2024-01-08T00:00:00Z",
+      "lastModified": "2024-06-27T12:57:00Z",
+      "status": "active"
+    },
+    "009": {
+      "id": "009",
+      "originalName": "3.2.Business Partner - Seeburger connection.drawio",
+      "currentDrawioFile": "009_3.2.Business Partner - Seeburger connection.drawio",
+      "currentPngFile": "009_3.2.Business Partner - Seeburger connection.png",
+      "title": "Business Partner - Seeburger connection",
+      "topic": 3,
+      "level": 2,
+      "created": "2024-01-09T00:00:00Z",
+      "lastModified": "2024-06-27T12:57:00Z",
+      "status": "active"
+    },
+    "010": {
+      "id": "010",
+      "originalName": "3.2.MyTime - Connection SAP-ATOSS.drawio",
+      "currentDrawioFile": "010_3.2.MyTime - Connection SAP-ATOSS.drawio",
+      "currentPngFile": "010_3.2.MyTime - Connection SAP-ATOSS.png",
+      "title": "MyTime - Connection SAP-ATOSS",
+      "topic": 3,
+      "level": 2,
+      "created": "2024-01-10T00:00:00Z",
+      "lastModified": "2024-06-27T12:57:00Z",
+      "status": "active"
+    },
+    "011": {
+      "id": "011",
+      "originalName": "3.3. Workzone and Mobile Start.drawio",
+      "currentDrawioFile": "011_3.3. Workzone and Mobile Start.drawio",
+      "currentPngFile": "011_3.3. Workzone and Mobile Start.png",
+      "title": "Workzone and Mobile Start",
+      "topic": 3,
+      "level": 3,
+      "created": "2024-01-11T00:00:00Z",
+      "lastModified": "2024-06-27T12:57:00Z",
+      "status": "active"
+    }
+  }
+}
