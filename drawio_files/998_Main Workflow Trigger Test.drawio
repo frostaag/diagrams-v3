@@ -1,0 +1,23 @@
+<mxfile host="app.diagrams.net" agent="Mozilla/5.0" version="27.1.4">
+  <diagram name="Page-1" id="test-conversion-123">
+    <mxGraphModel dx="1234" dy="721" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="test-box-1" value="Test Workflow Conversion" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#0070F2;fillColor=#EBF8FF;arcSize=24;absoluteArcSize=1;strokeWidth=1.5;" vertex="1" parent="1">
+          <mxGeometry x="300" y="200" width="200" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="test-box-2" value="🚀 Puppeteer Conversion Test" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#28a745;fillColor=#d4edda;arcSize=24;absoluteArcSize=1;strokeWidth=1.5;" vertex="1" parent="1">
+          <mxGeometry x="320" y="320" width="160" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="test-arrow-1" value="" style="endArrow=blockThin;html=1;strokeColor=#4D4D4D;strokeWidth=2;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="test-box-1" target="test-box-2">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="400" y="360" as="sourcePoint" />
+            <mxPoint x="450" y="310" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
+<!-- Modified to test workflow -->
