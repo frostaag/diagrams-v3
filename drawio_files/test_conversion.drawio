@@ -7,7 +7,7 @@
         <mxCell id="test-box-1" value="Test Workflow Conversion" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#0070F2;fillColor=#EBF8FF;arcSize=24;absoluteArcSize=1;strokeWidth=1.5;" vertex="1" parent="1">
           <mxGeometry x="300" y="200" width="200" height="80" as="geometry" />
         </mxCell>
-        <mxCell id="test-box-2" value="✓ Draw.io → PNG" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#28a745;fillColor=#d4edda;arcSize=24;absoluteArcSize=1;strokeWidth=1.5;" vertex="1" parent="1">
+        <mxCell id="test-box-2" value="🚀 Puppeteer Conversion Test" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#28a745;fillColor=#d4edda;arcSize=24;absoluteArcSize=1;strokeWidth=1.5;" vertex="1" parent="1">
           <mxGeometry x="320" y="320" width="160" height="60" as="geometry" />
         </mxCell>
         <mxCell id="test-arrow-1" value="" style="endArrow=blockThin;html=1;strokeColor=#4D4D4D;strokeWidth=2;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="test-box-1" target="test-box-2">
